@@ -53,19 +53,18 @@ See [`docs/install.md`](docs/install.md) for up-to-date install instructions.
 
 ---
 
-## Getting Started
+## Usage
 
 > For a high-level overview, see [`docs/spec.md`](docs/spec.md).
 
 Basic usage:
 
-```matlab
-% Convert a Pulseq sequence file to PulSeg intermediate representation
-seg = pulseg.fromSeq('path/to/your/sequence.seq');
-```
-
-- Explore the `segq struct for segment definitions, base blocks, and instances
-- See [`matlab/+pulseg/fromSeq.m`](matlab/+pulseg/fromSeq.m) for implementation details
+1. Create the Pulseq (`.seq`) file. Assign `TRID` label to the first block in each segment instance.
+2. 
+2.  Convert to PulSeg intermediate representation
+    ```matlab
+    psq = pulseg.fromSeq('path/to/your/sequence.seq');
+    ```
 
 ---
 
