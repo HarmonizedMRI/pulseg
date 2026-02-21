@@ -21,13 +21,13 @@ Version 1.0 of the intermediate representation specification is now formalized �
 
 ## Key Concepts
 
-- **Base Block**
-  The fundamental normalized atomic building blocks (`excite`, `acquire`, `spoil`, etc.).
+- **Base Block:**
+  A Pulseq block with normalized waveform amplitudes. Base blocks are the fundamental normalized atomic building blocks of the sequence (`excite`, `acquire`, `spoil`, etc.).
 
-- **Virtual Segment**
-  Ordered sequences of base blocks (abstract “cores”).
+- **Virtual Segment:**
+  Ordered sequences of base blocks.
 
-- **Segment Instance**
+- **Segment Instance:**
   Specific realizations of virtual segments in the scan loop, with defined amplitudes, phases, and offsets.
 
 ![Intermediate Representation Diagram](docs/spec-diagram.png)
