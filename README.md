@@ -56,10 +56,14 @@ See [`docs/install.md`](docs/install.md) for up-to-date install instructions.
 ## Usage
 
 1. Create the Pulseq (`.seq`) file. Assign `TRID` label to the first block in each segment instance.
+> At present, `TRID` labels must be explicitly assigned by the sequence designer. 
+Automatically detecting and assigning segment instances is an **unmet need**.
+
 2.  Convert to PulSeg intermediate representation
     ```matlab
     psq = pulseg.fromSeq('path/to/your/sequence.seq');
     ```
+
 3. For execution on GE, use the `pge2` toolbox, https://github.com/HarmonizedMRI/pge2.
 
 ---
