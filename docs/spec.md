@@ -12,11 +12,11 @@
 ## 1. Definitions
 
 - **Base Block:**  
-  A Pulseq block with normalized waveform amplitudes and defined block type (e.g., RF, gradient, ADC). Acts as an atomic element.
+  A Pulseq block with normalized waveform amplitudes. Acts as an atomic element.
 - **Virtual Segment:**  
-  An ordered sequence of base blocks representing a generic segment of the MRI sequence, without specific amplitudes or phase/frequency offsets. Also referred to as a “core”.
+  An ordered sequence of base blocks representing a generic segment of the MRI sequence, without specific amplitudes or phase/frequency offsets. 
 - **Segment Instance:**  
-  A realization of a virtual segment within the scan loop, providing concrete waveform amplitudes, phase and frequency offsets, and unique parameterization.
+  A realization of a virtual segment within the scan loop, providing concrete waveform amplitudes, and phase and frequency offsets.
 
 ---
 
@@ -26,10 +26,9 @@
 
 ```matlab
 struct BaseBlock
-    type: string         // Block type, e.g., 'excite', 'acquire', 'spoil'
-    waveform: array      // Normalized amplitude array
-    axis: string[]       // ['RF', 'Gx', 'Gy', 'Gz', ...]
-    metadata: struct     // Optional, includes timing, duration, shape
+    id: int                // Unique base block ID
+    block: Pulseq block    // A Pulseq block with normalized waveform amplitudes
+    name: string           // Optional, descriptive name 
 end
 ```
 
@@ -37,9 +36,10 @@ end
 
 ```matlab
 struct VirtualSegment
-    id: integer              // Unique segment/core ID
-    base_blocks: BaseBlock[] // Ordered sequence of base blocks
-    metadata: struct         // Optional, segment-level metadata
+    id: int                      // Unique segment ID
+    baseBlockIdx:  int vector    // Base block IDs
+    instances: int vector        // Start indices (row numbers in .seq file) of all segment instances
+    name: string                 // Optional, descriptive name
 end
 ```
 
@@ -58,7 +58,7 @@ end
 The IR should include:
 - List of BaseBlocks
 - List of VirtualSegments
-- List of SegmentInstances (per scan repetition)
+- Dynamic scan settings, e.g., as list of SegmentInstances, or a table of dynamically varying virtual segment IDs and  amplitude/phase settings.
 - Specification version (`ir_version: 1.0`)
 
 ---
@@ -69,7 +69,7 @@ The IR should include:
 
 1. Parse Pulseq file → Identify and normalize blocks (BaseBlocks).
 2. Assemble VirtualSegments from ordered base blocks.
-3. Generate SegmentInstances for each scan repetition, parameterized with physical values.
+3. Create table containing dynamic list of segment instances and associated waveform amplitude/phase/frequency.
 
 ### 3.2 Requirements
 
