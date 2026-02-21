@@ -11,7 +11,7 @@
 
 ## Overview
 
-`PulSeg` provides a standardize pipeline for converting [Pulseq](https://pulseq.github.io/) MRI pulse sequence files into a segment-based **intermediate representation**. 
+`PulSeg` provides a standardized pipeline for converting [Pulseq](https://pulseq.github.io/) MRI pulse sequence files into a segment-based **intermediate representation**. 
 This abstraction enables translation of Pulseq sequences to certain hardware platforms such as GE.
 
 *Project status:
@@ -54,8 +54,6 @@ See [`docs/install.md`](docs/install.md) for up-to-date install instructions.
 ---
 
 ## Usage
-
-Basic usage:
 
 1. Create the Pulseq (`.seq`) file. Assign `TRID` label to the first block in each segment instance.
 2.  Convert to PulSeg intermediate representation
