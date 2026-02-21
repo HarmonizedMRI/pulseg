@@ -11,7 +11,8 @@
 
 ## Overview
 
-`PulSeg` provides a robust, standardized pipeline for converting [Pulseq](https://pulseq.github.io/) MRI pulse sequence files into a segment-based **intermediate representation**. This abstraction enables translation of Pulseq sequences to certain hardware platforms such as GE.
+`PulSeg` provides a standardize pipeline for converting [Pulseq](https://pulseq.github.io/) MRI pulse sequence files into a segment-based **intermediate representation**. 
+This abstraction enables translation of Pulseq sequences to certain hardware platforms such as GE.
 
 *Project status:
 Version 1.0 of the intermediate representation specification is now formalized â€“ see [`docs/spec.md`](docs/spec.md).*
@@ -33,20 +34,19 @@ Version 1.0 of the intermediate representation specification is now formalized â
 
 ---
 
-## Why Pulseg?
-
-- Aids Pulseq file interpretation across hardware platforms
-- Enables efficient sequence modularity and parameterization
-- Preserves benefits of Pulseq: Facilitaties rapid prototyping, simulation, and optimization workflows
-
----
-
 ## Installation
 
 Clone the repository:
 ```bash
 git clone https://github.com/HarmonizedMRI/pulseg.git
 ```
+
+Add to MATLAB path:
+```matlab
+>> addpath pulseg/matlab    % +pulseg toolbox
+>> addpath(genpath('pulseg/matlab/third_party'))
+```
+
 <!---
 See [`docs/install.md`](docs/install.md) for up-to-date install instructions.
 --->
@@ -55,16 +55,14 @@ See [`docs/install.md`](docs/install.md) for up-to-date install instructions.
 
 ## Usage
 
-> For a high-level overview, see [`docs/spec.md`](docs/spec.md).
-
 Basic usage:
 
 1. Create the Pulseq (`.seq`) file. Assign `TRID` label to the first block in each segment instance.
-2. 
 2.  Convert to PulSeg intermediate representation
     ```matlab
     psq = pulseg.fromSeq('path/to/your/sequence.seq');
     ```
+3. For execution on GE, use the `pge2` toolbox, https://github.com/HarmonizedMRI/pge2.
 
 ---
 
