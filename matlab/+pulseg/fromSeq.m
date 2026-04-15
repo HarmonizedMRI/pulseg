@@ -10,6 +10,10 @@ function psq = fromSeq(seqarg, varargin)
 %   verbose               true/FALSE    Print some info to the terminal
 %   usesRotationEvents    TRUE/false    If false, this script tries to estimate 
 %                                       in plane (2D, x-y) rotations from the gradient shapes.
+%   P                     [3 3]         A global gradient projection matrix. Default: eye(3).
+%                                       The 3x3 'rotation' matrix stored in the psq object is actually P*R,
+%                                       where R is the rotation matrix. For example, to only play the x gradient,
+%                                       set P = [1 0 0; 0 0 0; 0 0 0]
 %
 % Output
 %   psq        PulSeq sequence struct, see github/HarmonizedMRI/pulseg/docs/spec.md
@@ -25,6 +29,7 @@ function psq = fromSeq(seqarg, varargin)
 % defaults
 arg.verbose = false;
 arg.usesRotationEvents = true;
+arg.P = eye(3);
 
 % Substitute specified system values as appropriate (from MIRT toolbox)
 arg = vararg_pair(arg, varargin);
@@ -251,6 +256,9 @@ while n < psq.nMax + 1
 
         n = n + 1;
     end
+
+    % Apply projection matrix
+    R = P*R;
 
     % Set rotation for last block in segment instance; 
     % the interpreter uses this to set the rotation for the whole segment
