@@ -258,7 +258,7 @@ while n < psq.nMax + 1
     end
 
     % Apply projection matrix
-    R = P*R;
+    R = arg.P*R;
 
     % Set rotation for last block in segment instance; 
     % the interpreter uses this to set the rotation for the whole segment
