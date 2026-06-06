@@ -2,118 +2,219 @@
 
 # PulSeg Intermediate Representation Specification
 
-**Version:** 1.0  
-**Date:** 2026-02-20  
+**Version:** 2.0  
+**Date:** 2026-mm-dd  
 **Status:** Initial Release  
-**Scope:** Formal definition of the intermediate representation for converting Pulseq MRI sequence files in pulseg. This specification is stable; future changes must increment version.
+**Authors:** [Author names]  
+**Repository:** https://github.com/HarmonizedMRI/pulseg
 
 ---
 
-## 1. Definitions
+## 1. Overview
 
-- **Base Block:**  
-  A Pulseq block with normalized waveform amplitudes. Acts as an atomic element.
-- **Virtual Segment:**  
-  An ordered sequence of base blocks representing a generic segment of the MRI sequence, without specific amplitudes or phase/frequency offsets. 
-- **Segment Instance:**  
-  A realization of a virtual segment within the scan loop, providing concrete waveform amplitudes, and phase and frequency offsets.
+PulSeg is a vendor-neutral intermediate representation (IR) for MRI pulse sequences. 
+It is designed to sit between a high-level sequence description format (such as Pulseq) 
+and a vendor-specific hardware execution layer. By making explicit the repeating structural 
+units present in most MRI sequences, PulSeg enables efficient and unambiguous mapping onto 
+the internal execution models of real scanner hardware.
 
----
+This document defines the PulSeg data structures, terminology, and conversion requirements. 
+It is intended for developers of sequence conversion tools, scanner interpreters, and 
+simulation frameworks.
 
-## 2. Data Structures
-
-### 2.1 BaseBlock
-
-```matlab
-struct BaseBlock
-    id: int                // Unique base block ID
-    block: Pulseq block    // A Pulseq block with normalized waveform amplitudes
-    name: string           // Optional, descriptive name 
-end
-```
-
-### 2.2 VirtualSegment
-
-```matlab
-struct VirtualSegment
-    id: int                      // Unique segment ID
-    baseBlockIdx:  int vector    // Base block IDs
-    instances: int vector        // Start indices (row numbers in .seq file) of all segment instances
-    name: string                 // Optional, descriptive name
-end
-```
-
-### 2.3 SegmentInstance
-
-```matlab
-struct SegmentInstance
-    virtual_segment_id: integer          // Reference to VirtualSegment
-    instance_id: integer                 // Optional, unique occurrence within scan loop
-    parameterization: dict               // Key-values for amplitude, phase, etc.
-end
-```
-
-### 2.4 Intermediate Representation
-
-The IR should include:
-- List of BaseBlocks
-- List of VirtualSegments
-- Dynamic scan settings, e.g., as list of SegmentInstances, or a table of dynamically varying virtual segment IDs and  amplitude/phase settings.
-- Specification version (`ir_version: 1.0`)
+This specification is stable at version 1.0. Any change affecting data structure definitions, 
+field semantics, or required fields must increment the version number and include 
+migration notes in the changelog (see Section 7).
 
 ---
 
-## 3. Workflow
+## 2. Definitions
 
-### 3.1 Conversion
+- **Pulseq block:**  
+  An atomic time unit in the [Pulseq](https://pulseq.github.io/) sequence format,
+  containing at most one waveform per gradient axis, one RF waveform, and one ADC window. 
+  Waveform amplitudes in a Pulseq block
+  reflect the actual physical amplitudes used during that block.
 
-1. Parse Pulseq file → Identify and normalize blocks (BaseBlocks).
-2. Assemble VirtualSegments from ordered base blocks.
-3. Create table containing dynamic list of segment instances and associated waveform amplitude/phase/frequency.
+- **Base block:**  
+  A Pulseq block in which all waveform amplitudes have been normalized to a canonical value 
+  (see Section 3.1). A base block defines the *shape* of the waveforms but not their 
+  physical amplitudes. Base blocks are the atomic elements of a PulSeg representation.
 
-### 3.2 Requirements
+- **Virtual segment:**  
+  An ordered, finite sequence of base blocks representing a generic, reusable unit of the 
+  MRI sequence — for example, a TR period or a contrast preparation module. A virtual segment 
+  defines the *structure* of a sequence unit but not the specific amplitudes, phases, or 
+  frequency offsets used in any particular execution.
 
-- All base blocks MUST be normalized.
-- Virtual segments MUST be uniquely identified.
-- Segment instance parameterization MUST include amplitude and phase/frequency offsets.
-- IR version identifier MUST be included.
+- **Segment instance:**  
+  A concrete realization of a virtual segment within the scan loop. A segment instance 
+  associates a virtual segment with specific waveform amplitudes, RF phase offsets, and 
+  frequency offsets for a single occurrence in the scan.
+
+- **Scan loop:**  
+  The ordered sequence of segment instances that defines the complete execution of the 
+  MRI sequence on the scanner.
 
 ---
 
-## 4. Figure 1: Intermediate Representation Diagram
+## 3. Data Structures
+
+All field names use snake_case. Fields marked **(required)** must be present in any 
+compliant PulSeg representation. Fields marked **(optional)** may be omitted.
+
+### 3.1 BaseBlock
+
+A base block wraps a single Pulseq block with normalized waveform amplitudes.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | int | required | Unique identifier for this base block. Must be a positive integer. |
+| `block` | PulseqBlock | required | A Pulseq block with all waveform amplitudes normalized to 1.0 (or 0.0 for unused channels). See normalization rules below. |
+| `name` | string | optional | Human-readable descriptive label (e.g., `"rf_excitation"`, `"readout_gradient"`). |
+
+**Normalization rules:**
+- RF waveforms: normalize by peak magnitude, such that `max(abs(rf.signal)) == 1.0`
+- Gradient waveforms: normalize by peak absolute amplitude, such that `max(abs(grad.waveform)) == 1.0`
+- ADC windows: not normalized; copied directly from the Pulseq block
+- A channel with no waveform in the original block must have no waveform in the base block
+
+### 3.2 VirtualSegment
+
+A virtual segment defines an ordered sequence of base blocks constituting a reusable 
+sequence unit.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `id` | int | required | Unique identifier for this virtual segment. Must be a positive integer. |
+| `base_block_ids` | int[] | required | Ordered list of base block IDs comprising this segment. Must be non-empty. All referenced IDs must exist in the base block list. |
+| `instance_start_indices` | int[] | required | Row numbers (1-indexed) in the Pulseq `.seq` file at which each instance of this segment begins. Used to reconstruct the scan loop. |
+| `name` | string | optional | Human-readable descriptive label (e.g., `"TR"`, `"inversion_prep"`). |
+
+**Constraints:**
+- `base_block_ids` must contain at least one entry
+- All IDs in `base_block_ids` must reference valid base blocks
+- `instance_start_indices` must be strictly increasing
+
+### 3.3 SegmentInstance
+
+A segment instance associates a virtual segment with the concrete parameters for a 
+single execution in the scan loop.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `virtual_segment_id` | int | required | ID of the virtual segment being instantiated. Must reference a valid virtual segment. |
+| `i_instance` | int | required | Position of this instance in the scan loop (1-indexed, strictly increasing across all instances). |
+| `rf_amplitude` | float[] | required | Scaling factors for RF waveform amplitudes, one per RF event in the virtual segment. Multiply by the normalized base block RF amplitude to recover the physical amplitude. |
+| `gradient_amplitude` | float[3][] | required | Scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. |
+| `rf_phase_offset` | float[] | required | RF phase offsets in radians, one per RF event in the virtual segment. |
+| `frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
+| `label` | string | optional | Optional scan loop label for this instance (e.g., for slice or contrast indexing). |
+
+**Notes:**
+- If a virtual segment contains no RF events, `rf_amplitude`, `rf_phase_offset`, and 
+  `frequency_offset` (for RF) may be empty arrays but must still be present as fields
+- Physical amplitude = base block normalized amplitude × scaling factor
+
+### 3.4 PulSeg Representation (Top-Level Structure)
+
+A complete PulSeg representation consists of the following top-level fields:
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `pulseg_version` | string | required | Version of this specification. Must be `"2.0"` for representations compliant with this document. |
+| `base_blocks` | BaseBlock[] | required | List of all base blocks. Must be non-empty. IDs must be unique. |
+| `virtual_segments` | VirtualSegment[] | required | List of all virtual segments. Must be non-empty. IDs must be unique. |
+| `scan_loop` | SegmentInstance[] | required | Ordered list of segment instances defining the complete scan execution. Must be non-empty. |
+| `source_file` | string | optional | Path or filename of the source Pulseq `.seq` file from which this representation was generated. |
+| `creation_date` | string | optional | ISO 8601 date string (e.g., `"2025-02-20"`) indicating when this representation was created. |
+
+---
+
+## 4. Conversion from Pulseq
+
+### 4.1 Overview
+
+Conversion from a Pulseq `.seq` file to PulSeg proceeds in three steps:
+
+1. **Parse and normalize** — Read all Pulseq blocks; normalize waveform amplitudes to 
+   produce base blocks (see Section 3.1 normalization rules).
+2. **Identify segments** — Group consecutive base blocks into virtual segments. Segment 
+   boundaries must be explicitly annotated in the Pulseq file using the PulSeg labeling 
+   convention (see Section 4.2).
+3. **Build the scan loop** — For each instance of each virtual segment in the Pulseq 
+   block stream, record the physical amplitude, phase, and frequency parameters as a 
+   segment instance.
+
+### 4.2 Segment Boundary Annotation
+
+Segment boundaries are defined by the sequence designer at the time of Pulseq sequence 
+creation, using Pulseq block labels. The labeling convention is as follows:
+
+- The first block of each virtual segment must be labeled with a unique segment identifier
+- Consecutive blocks carrying the same segment identifier, or unlabeled blocks following 
+  a labeled block, are considered part of the same segment
+- A new label on any block marks the start of a new segment
+
+*[Note: provide a concrete example here, ideally with a code snippet from a Pulseq sequence 
+file and the resulting PulSeg representation.]*
+
+### 4.3 Conversion Requirements
+
+The following requirements apply to any compliant Pulseq-to-PulSeg conversion:
+
+- All base block waveforms MUST be normalized according to the rules in Section 3.1
+- Every virtual segment MUST have a unique ID
+- Every base block MUST have a unique ID
+- The scan loop MUST account for every block in the source Pulseq file (conversion is lossless)
+- The `pulseg_version` field MUST be set to the version of this specification
+- Amplitude scaling factors MUST be such that: physical amplitude = normalized amplitude × scale factor
+
+---
+
+## 5. Diagram
 
 ![Intermediate Representation](./spec-diagram.png)
 
----
-
-## 5. Versioning
-
-This document is version 1.0.  
-Any changes affecting structure or field meanings must increment the version number and provide migration notes.
+*Figure 1. Schematic of the PulSeg intermediate representation, showing the relationship 
+between base blocks, virtual segments, and segment instances in the scan loop.*
 
 ---
 
-## 6. References
+## 6. Versioning and Changelog
 
-- [Pulseq Specification](https://pulseq.github.io/)
-- [PulSeg GitHub repository](https://github.com/HarmonizedMRI/pulseg/)
+**Current version:** 2.0
+
+Any change to this specification that affects data structure definitions, field names, 
+field types, required/optional status, or normalization rules must:
+1. Increment the version number (patch increment for clarifications, minor increment for 
+   additive changes, major increment for breaking changes)
+2. Add an entry to the changelog below
+3. Update the `pulseg_version` field description in Section 3.4
+
+### Changelog
+
+| Version | Date | Description |
+|---|---|---|
+| 1.0 | 2025-02-20 | Initial release |
+| 2.0 | 2026-mm-dd | Class definition structural upgrade; minor naming standard alignment to PyPulseq variable guide |
+
+---
+
+## 7. References
+
+- Layton KJ et al. Pulseq: A rapid and hardware-independent pulse sequence prototyping 
+  framework. *Magn Reson Med.* 2017;77(4):1544–1552.
+- [Pulseq specification](https://pulseq.github.io/)
+- [PulSeg GitHub repository](https://github.com/HarmonizedMRI/pulseg)
 
 ---
 
-## 7. Contact
+## 8. Contact and Contributions
 
-For questions, feedback, or change requests:  
-- [GitHub Issues](https://github.com/HarmonizedMRI/pulseg/issues)  
-- Email: *your-address@your-domain.edu*
+For questions, bug reports, or change requests, please open a GitHub issue:  
+https://github.com/HarmonizedMRI/pulseg/issues
 
----
-
-
----
-
-### Optional: Add a CHANGELOG.md in your docs directory to record any modifications by version.
-
-### Optional: Add a `ir_version` field to your intermediate representation files, enforcing compatibility checks.
-
----
+For correspondence regarding this specification:  
+*[your-address@your-domain.edu]*
 
