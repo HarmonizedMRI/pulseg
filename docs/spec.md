@@ -52,7 +52,7 @@ migration notes in the changelog (see Section 7).
   associates a virtual segment with specific waveform amplitudes, RF phase offsets, and 
   frequency offsets for a single occurrence in the scan.
 
-- **Scan loop:**  
+- **Execution stream:**  
   The ordered sequence of segment instances that defines the complete execution of the 
   MRI sequence on the scanner.
 
@@ -60,7 +60,7 @@ migration notes in the changelog (see Section 7).
 
 ## 3. Data Structures
 
-All field names use snake_case. Fields marked **(required)** must be present in any 
+All field names use snake\_case. Fields marked **(required)** must be present in any 
 compliant PulSeg representation. Fields marked **(optional)** may be omitted.
 
 ### 3.1 BaseBlock
@@ -71,7 +71,7 @@ A base block wraps a single Pulseq block with normalized waveform amplitudes.
 |---|---|---|---|
 | `id` | int | required | Unique identifier for this base block. Must be a positive integer. |
 | `block` | PulseqBlock | required | A Pulseq block with all waveform amplitudes normalized to 1.0 (or 0.0 for unused channels). See normalization rules below. |
-| `name` | string | optional | Human-readable descriptive label (e.g., `"rf_excitation"`, `"readout_gradient"`). |
+| `name` | string | optional | Human-readable descriptive label (e.g., `"rf_prep"`, `"gx_spoil"`). |
 
 **Normalization rules:**
 - Single-channel RF waveforms: Normalize by peak magnitude, such that `max(|rf.signal|) == 1.0`.
@@ -107,15 +107,18 @@ single execution in the execution stream.
 |---|---|---|---|
 | `virtual_segment_id` | int | required | ID of the virtual segment being instantiated. Must reference a valid virtual segment. |
 | `rf_amplitude` | float[] | required | Scaling factors for RF waveform amplitudes, one per RF event in the virtual segment. Multiply by the normalized base block RF amplitude to recover the physical amplitude. |
-| `gradient_amplitude` | float[3][] | required | Scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. |
 | `rf_phase_offset` | float[] | required | RF phase offsets in radians, one per RF event in the virtual segment. |
-| `frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
-| `rotation_matrix` | float[3][3] | optional| D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
+| `rf_frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
+| `gradient_amplitude` | float[3][] | required | Scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. |
+| `adc_phase_offset` | float[] | required | ADC receiver phase offsets in radians, one per ADC event in the virtual segment. |
+| `block_duration` | float[] | required | Pulseq block duration in seconds, one per block in the virtual segment. |
+| `rotation_matrix` | float[3][3][] | optional | 3D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
+| `physio_trigger` | int | required | Binary hardware flag (1 or 0) indicating whether execution must pause to await a physical gating event (e.g., ECG R-wave or respiratory trigger) before playing out this instance. |
 | `label` | string | optional | Optional execution stream label for this instance (e.g., for slice or contrast indexing). |
 
 **Notes:**
-- If a virtual segment contains no RF events, `rf_amplitude`, `rf_phase_offset`, and 
-  `frequency_offset` (for RF) may be empty arrays but must still be present as fields
+- If a virtual segment contains no RF/gradient/adc events, the associated columns (e.g., `rf_amplitude`, `rf_phase_offset`, etc)
+  may be empty arrays but must still be present as fields
 - Physical amplitude = base block normalized amplitude × scaling factor
 
 ### 3.4 PulSeg Representation (Top-Level Structure)
