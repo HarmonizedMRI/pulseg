@@ -120,7 +120,7 @@ single execution in the execution stream.
 | `adc_phase_offset` | float[] | required | ADC receiver phase offsets in radians, one per ADC event in the virtual segment. |
 | `block_duration` | float[] | required | Pulseq block duration in seconds, one per block in the virtual segment. |
 | `rotation_matrix` | float[3][3][] | optional | 3D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
-| `physio_trigger` | int | required | Binary hardware flag (1 or 0) indicating whether execution must pause to await a physical gating event (e.g., ECG R-wave or respiratory trigger) before playing out this instance. |
+| `physio_trigger` | int | optional | Binary hardware flag (1 or 0) indicating whether execution must pause to await a physical gating event (e.g., ECG R-wave or respiratory trigger) before playing out this instance. Defaults to 0 if omitted. |
 | `label` | string | optional | Optional execution stream label for this instance (e.g., for slice or contrast indexing). |
 
 **Notes:**
