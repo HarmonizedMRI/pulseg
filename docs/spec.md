@@ -74,8 +74,12 @@ A base block wraps a single Pulseq block with normalized waveform amplitudes.
 | `name` | string | optional | Human-readable descriptive label (e.g., `"rf_excitation"`, `"readout_gradient"`). |
 
 **Normalization rules:**
-- RF waveforms: normalize by peak magnitude, such that `max(abs(rf.signal)) == 1.0`
-- Gradient waveforms: normalize by peak absolute amplitude, such that `max(abs(grad.waveform)) == 1.0`
+- Single-channel RF waveforms: Normalize by peak magnitude, such that `max(|rf.signal|) == 1.0`.
+- Multi-channel RF waveforms (Parallel Transmit / pTx): Normalize all transmit channels by a single global scaling factor 
+derived from the maximum peak magnitude across all channels combined, such that 
+$\max_{c}(\max(\lvert\text{rf.signal}_c\rvert)) == 1.0$. 
+This ensures that the relative amplitude between distinct physical transmit coils are strictly preserved.
+- Gradient waveforms: normalize each channel independently by peak absolute amplitude, such that `max(|grad.waveform|) == 1.0` for each channel.
 - ADC windows: not normalized; copied directly from the Pulseq block
 - A channel with no waveform in the original block must have no waveform in the base block
 
@@ -88,13 +92,11 @@ sequence unit.
 |---|---|---|---|
 | `id` | int | required | Unique identifier for this virtual segment. Must be a positive integer. |
 | `base_block_ids` | int[] | required | Ordered list of base block IDs comprising this segment. Must be non-empty. All referenced IDs must exist in the base block list. |
-| `instance_start_indices` | int[] | required | Row numbers (1-indexed) in the Pulseq `.seq` file at which each instance of this segment begins. Used to reconstruct the scan loop. |
-| `name` | string | optional | Human-readable descriptive label (e.g., `"TR"`, `"inversion_prep"`). |
+| `name` | string | optional | Human-readable descriptive label (e.g., `"tr_delay"`, `"inversion_prep"`). |
 
 **Constraints:**
 - `base_block_ids` must contain at least one entry
 - All IDs in `base_block_ids` must reference valid base blocks
-- `instance_start_indices` must be strictly increasing
 
 ### 3.3 SegmentInstance
 
@@ -104,11 +106,11 @@ single execution in the scan loop.
 | Field | Type | Required | Description |
 |---|---|---|---|
 | `virtual_segment_id` | int | required | ID of the virtual segment being instantiated. Must reference a valid virtual segment. |
-| `i_instance` | int | required | Position of this instance in the scan loop (1-indexed, strictly increasing across all instances). |
 | `rf_amplitude` | float[] | required | Scaling factors for RF waveform amplitudes, one per RF event in the virtual segment. Multiply by the normalized base block RF amplitude to recover the physical amplitude. |
 | `gradient_amplitude` | float[3][] | required | Scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. |
 | `rf_phase_offset` | float[] | required | RF phase offsets in radians, one per RF event in the virtual segment. |
 | `frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
+| `rotation_matrix` | float[3][3] | optional| D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
 | `label` | string | optional | Optional scan loop label for this instance (e.g., for slice or contrast indexing). |
 
 **Notes:**
