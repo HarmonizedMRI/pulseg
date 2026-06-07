@@ -37,9 +37,7 @@ if isa(seqarg, 'char')
     seq.read(seqarg);
     fprintf(' done\n');
 else
-    if ~isa(seqarg, 'mr.Sequence')
-        error('First argument is not an mr.Sequence object');
-    end
+    assert(isa(seqarg, 'mr.Sequence'), 'First argument is not an mr.Sequence object');
     seq = seqarg;
 end
 
@@ -53,11 +51,8 @@ pulseg_ir.nMax = size(blockEvents, 1);
 
 %% Get TRID labels and corresponding row indices for all segment instances
 nTRIDlabels = 0;
-%fprintf('Getting TRID labels (%d
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
 pulseg_ir.nReadouts = 0;
-nMaxTRIDs = 1000; % infinite number
-TRIDlist = 1:1000;
 for n = 1:pulseg_ir.nMax
     textprogressbar(n/pulseg_ir.nMax*100);
 
@@ -82,9 +77,7 @@ for n = 1:pulseg_ir.nMax
 end
 textprogressbar(''); 
 
-%% Get list of (virtual) segments.
-%% These are distinct from segment 'instances'.
-
+%% Get list of virtual segments
 [uniqueTridLabels, I] = unique(tridLabels.val);
 nBlocksPerTridLabel = diff([tridLabels.index pulseg_ir.nMax+1]);
 pulseg_ir.nSegments = length(uniqueTridLabels);
@@ -202,17 +195,15 @@ while n < pulseg_ir.nMax + 1
     
     b = seq.getBlock(n);
 
-    % skip if not the first block in segment instance
-    if trids(n) == 0
+    % skip if this block is not the first block in segment instance
+    if trids(n) == 0 
         n = n + 1;
         continue;
     end
 
-    % Loop over blocks in segment instance.
+    % Step through blocks in segment instance
     physioTrigger = false;
     i = find(uniqueTridLabels == trids(n));  % segment array index
-
-    R = eye(3);  % default rotation for this segment
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
         b = seq.getBlock(n);
@@ -233,12 +224,17 @@ while n < pulseg_ir.nMax + 1
             pulseg_ir.loop(n,:) = getdynamics(b, i, p, physioTrigger, pulseg_ir.base_blocks(p).block);
         end
 
-        % Get rotation
+        % set rotation
         if isfield(b, 'rotation')
             if strcmp(b.rotation.type, 'rot3D')
                 R = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
             end
+        else
+            R = eye(3);  % default rotation for this block
         end
+
+        R = R';
+        pulseg_ir.loop(n-1, 15:23) = R(:)';   % write R in row-major order
 
         n = n + 1;
     end
