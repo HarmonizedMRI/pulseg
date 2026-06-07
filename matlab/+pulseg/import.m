@@ -90,10 +90,10 @@ textprogressbar('');
 nBlocksPerTridLabel = diff([tridLabels.index pulseg_ir.nMax+1]);
 pulseg_ir.nSegments = length(uniqueTridLabels);
 for i = 1:pulseg_ir.nSegments
-    pulseg_ir.segments(i).nBlocksInSegment = nBlocksPerTridLabel(I(i));
-    pulseg_ir.segments(i).TRID = tridLabels.val(I(i));
-    pulseg_ir.segments(i).ID = i;
-    pulseg_ir.segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.segments(i).nBlocksInSegment-1];
+    pulseg_ir.virtual_segments(i).nBlocksInSegment = nBlocksPerTridLabel(I(i));
+    pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
+    pulseg_ir.virtual_segments(i).ID = i;
+    pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.virtual_segments(i).nBlocksInSegment-1];
 end
 
 
@@ -101,8 +101,8 @@ end
 pulseg_ir.nParentBlocks = 0;
 maxnBlocksInSegment = 0;
 for i = 1:pulseg_ir.nSegments
-    if pulseg_ir.segments(i).nBlocksInSegment > maxnBlocksInSegment
-        maxnBlocksInSegment = pulseg_ir.segments(i).nBlocksInSegment;
+    if pulseg_ir.virtual_segments(i).nBlocksInSegment > maxnBlocksInSegment
+        maxnBlocksInSegment = pulseg_ir.virtual_segments(i).nBlocksInSegment;
     end
 end
 isVariableDelay = false(pulseg_ir.nSegments, maxnBlocksInSegment);
@@ -112,7 +112,7 @@ n = tridLabels.index(1);  % start of first segment instance
 while n < pulseg_ir.nMax + 1
     i = find(uniqueTridLabels == trids(n));  % segment array index
 
-    for j = 1:pulseg_ir.segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
 
         b = seq.getBlock(n);
         T = getblocktype(b);
@@ -142,9 +142,9 @@ end
 
 for i = 1:pulseg_ir.nSegments
 
-    for j = 1:pulseg_ir.segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
 
-        n = pulseg_ir.segments(i).rows(j);
+        n = pulseg_ir.virtual_segments(i).rows(j);
 
         b = seq.getBlock(n);
         T = getblocktype(b);
@@ -152,9 +152,9 @@ for i = 1:pulseg_ir.nSegments
         % Pure delay block identification
         if T(4) == 1
             if isVariableDelay(i,j)
-                pulseg_ir.segments(i).blockIDs(j) = 1; % Implicit Variable Delay
+                pulseg_ir.virtual_segments(i).blockIDs(j) = 1; % Implicit Variable Delay
             else
-                pulseg_ir.segments(i).blockIDs(j) = 0; % Implicit Constant Delay
+                pulseg_ir.virtual_segments(i).blockIDs(j) = 0; % Implicit Constant Delay
             end
             continue;
         end
@@ -166,7 +166,7 @@ for i = 1:pulseg_ir.nSegments
             np = pulseg_ir.base_blocks(p).row; 
             if compareblocks(seq, blockEvents(n,:), blockEvents(np,:), n, np)
                 issame = true;
-                pulseg_ir.segments(i).blockIDs(j) = p;
+                pulseg_ir.virtual_segments(i).blockIDs(j) = p;
                 break;
             end
         end
@@ -180,7 +180,7 @@ for i = 1:pulseg_ir.nSegments
             pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).row = n;
             pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block = b;
             pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block.ID = pulseg_ir.nParentBlocks;
-            pulseg_ir.segments(i).blockIDs(j) = pulseg_ir.nParentBlocks;
+            pulseg_ir.virtual_segments(i).blockIDs(j) = pulseg_ir.nParentBlocks;
         end
     end
 end
@@ -214,13 +214,13 @@ while n < pulseg_ir.nMax + 1
 
     R = eye(3);  % default rotation for this segment
 
-    for j = 1:pulseg_ir.segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
         b = seq.getBlock(n);
 
         % get cardiac trigger
         T = getblocktype(b);
         physioTrigger = T(3);
-        p = pulseg_ir.segments(i).blockIDs(j);  % parent block index
+        p = pulseg_ir.virtual_segments(i).blockIDs(j);  % parent block index
 
         if p < 1  
             % pure delay block (constant or variable)
@@ -283,16 +283,16 @@ n = 1;
 while n < pulseg_ir.nMax
     i = pulseg_ir.loop(n, 1);  % segment index
 
-    if (n + pulseg_ir.segments(i).nBlocksInSegment) > pulseg_ir.nMax
+    if (n + pulseg_ir.virtual_segments(i).nBlocksInSegment) > pulseg_ir.nMax
         break;
     end
 
     % loop through blocks in segment
-    for j = 1:pulseg_ir.segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
 
-        % compare parent block id in pulseg_ir.loop against block id in pulseg_ir.segments(i)
+        % compare parent block id in pulseg_ir.loop against block id in pulseg_ir.virtual_segments(i)
         p = pulseg_ir.loop(n, 2);  % parent block id
-        p_ij = pulseg_ir.segments(i).blockIDs(j);
+        p_ij = pulseg_ir.virtual_segments(i).blockIDs(j);
         msg = ['Sequence contains inconsistent segment definitions. ' ...
                'This may occur due to programming error (possibly fatal), ' ...
                'or if an arbitrary gradient resembles that from another block ' ...
@@ -314,8 +314,8 @@ end
 
 % initialize max energy field
 for i = 1:pulseg_ir.nSegments
-    pulseg_ir.segments(i).Emax.val = 0;
-    pulseg_ir.segments(i).Emax.n = 1;
+    pulseg_ir.virtual_segments(i).Emax.val = 0;
+    pulseg_ir.virtual_segments(i).Emax.n = 1;
 end
    
 % find segment instance with max energy
@@ -325,7 +325,7 @@ while n < pulseg_ir.nMax
     i = pulseg_ir.loop(n, 1);  % segment index
     Etmp.gx = 0; Etmp.gy = 0; Etmp.gz = 0;
     nFirst = n;
-    for j = 1:pulseg_ir.segments(i).nBlocksInSegment  
+    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment  
         Etmp.gx = Etmp.gx + pulseg_ir.loop(n, 11);
         Etmp.gy = Etmp.gy + pulseg_ir.loop(n, 12);
         Etmp.gz = Etmp.gz + pulseg_ir.loop(n, 13);
@@ -334,9 +334,9 @@ while n < pulseg_ir.nMax
     Etmp.all = Etmp.gx + Etmp.gy + Etmp.gz;
 
     % update Emax field
-    if Etmp.all > pulseg_ir.segments(i).Emax.val
-        pulseg_ir.segments(i).Emax.n = nFirst;
-        pulseg_ir.segments(i).Emax.val = Etmp.all;
+    if Etmp.all > pulseg_ir.virtual_segments(i).Emax.val
+        pulseg_ir.virtual_segments(i).Emax.n = nFirst;
+        pulseg_ir.virtual_segments(i).Emax.val = Etmp.all;
     end
 end
 
