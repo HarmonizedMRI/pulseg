@@ -1,7 +1,8 @@
 function pulseg_ir = import(seqarg, varargin)
-% function pulseg_ir = import(seqarg, varargin)
+% IMPORT Convert a Pulseq (.seq) file or sequence object to a PulSeg IR struct.
 %
-% Convert a Pulseq file (http://pulseq.github.io/) to a PulSeg struct.
+% Syntax:
+%   pulseg_ir = pulseg.import(seqarg, 'verbose', true)
 %
 % Input
 %   seqarg     a Pulseq sequence object, or name of a .seq file
@@ -148,9 +149,13 @@ for i = 1:pulseg_ir.nSegments
         b = seq.getBlock(n);
         T = getblocktype(b);
 
-        % Pure delay block (constant or variable)
+        % Pure delay block identification
         if T(4) == 1
-            pulseg_ir.segments(i).blockIDs(j) = 0 - isVariableDelay(i,j);
+            if isVariableDelay(i,j)
+                pulseg_ir.segments(i).blockIDs(j) = 1; % Implicit Variable Delay
+            else
+                pulseg_ir.segments(i).blockIDs(j) = 0; % Implicit Constant Delay
+            end
             continue;
         end
 
@@ -158,7 +163,7 @@ for i = 1:pulseg_ir.nSegments
         % Now check if block is similar to an existing parent block
         issame = false;
         for p = 1:pulseg_ir.nParentBlocks
-            np = pulseg_ir.parentBlocks(p).row; 
+            np = pulseg_ir.base_blocks(p).row; 
             if compareblocks(seq, blockEvents(n,:), blockEvents(np,:), n, np)
                 issame = true;
                 pulseg_ir.segments(i).blockIDs(j) = p;
@@ -172,16 +177,16 @@ for i = 1:pulseg_ir.nSegments
                 fprintf('\nFound new parent block on line %d\n', n);
             end
             pulseg_ir.nParentBlocks = pulseg_ir.nParentBlocks + 1;
-            pulseg_ir.parentBlocks(pulseg_ir.nParentBlocks).row = n;
-            pulseg_ir.parentBlocks(pulseg_ir.nParentBlocks).block = b;
-            pulseg_ir.parentBlocks(pulseg_ir.nParentBlocks).block.ID = pulseg_ir.nParentBlocks;
+            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).row = n;
+            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block = b;
+            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block.ID = pulseg_ir.nParentBlocks;
             pulseg_ir.segments(i).blockIDs(j) = pulseg_ir.nParentBlocks;
         end
     end
 end
 
 for p = 1:pulseg_ir.nParentBlocks
-    pulseg_ir.parentBlocks(p).ID = p;
+    pulseg_ir.base_blocks(p).ID = p;
 end
 
 %% Get dynamic scan information, including cardiac trigger
@@ -223,7 +228,7 @@ while n < pulseg_ir.nMax + 1
             n = n + 1;
             continue;
         else
-            pulseg_ir.loop(n,:) = getdynamics(b, i, p, physioTrigger, pulseg_ir.parentBlocks(p).block);
+            pulseg_ir.loop(n,:) = getdynamics(b, i, p, physioTrigger, pulseg_ir.base_blocks(p).block);
         end
 
         % Get rotation
@@ -235,7 +240,7 @@ while n < pulseg_ir.nMax + 1
             end
         else
             % try to detect 2D rotations by analyzing the gradient shapes
-            [Rtmp, scale] = getrotation(b, pulseg_ir.parentBlocks(p).block);
+            [Rtmp, scale] = getrotation(b, pulseg_ir.base_blocks(p).block);
             
             if ~isempty(Rtmp)
                 if norm(Rtmp - eye(3), "fro") > 1e-6
@@ -244,7 +249,7 @@ while n < pulseg_ir.nMax + 1
                     R = Rtmp;
 
                     % set gradient amplitudes equal to those in the parent block (possibly scaled)
-                    pulseg_ir.loop(n, [6 8 10]) = scale * pulseg_ir.loop(pulseg_ir.parentBlocks(p).row, [6 8 10]);
+                    pulseg_ir.loop(n, [6 8 10]) = scale * pulseg_ir.loop(pulseg_ir.base_blocks(p).row, [6 8 10]);
                 end
             end
         end
