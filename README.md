@@ -61,7 +61,7 @@ Automatically detecting and assigning segment instances is an **unmet need**.
 
 2.  Convert to PulSeg intermediate representation
     ```matlab
-    psq = pulseg.fromSeq('path/to/your/sequence.seq');
+    pulseg_ir = pulseg.import('path/to/your/sequence.seq');
     ```
 
 3. For execution on GE, use the `pge2` toolbox, https://github.com/HarmonizedMRI/pge2.
