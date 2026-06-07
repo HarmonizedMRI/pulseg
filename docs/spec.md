@@ -48,7 +48,7 @@ migration notes in the changelog (see Section 7).
   frequency offsets used in any particular execution.
 
 - **Segment instance:**  
-  A concrete realization of a virtual segment within the scan loop. A segment instance 
+  A concrete realization of a virtual segment within the execution stream. A segment instance 
   associates a virtual segment with specific waveform amplitudes, RF phase offsets, and 
   frequency offsets for a single occurrence in the scan.
 
@@ -101,7 +101,7 @@ sequence unit.
 ### 3.3 SegmentInstance
 
 A segment instance associates a virtual segment with the concrete parameters for a 
-single execution in the scan loop.
+single execution in the execution stream.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
@@ -111,7 +111,7 @@ single execution in the scan loop.
 | `rf_phase_offset` | float[] | required | RF phase offsets in radians, one per RF event in the virtual segment. |
 | `frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
 | `rotation_matrix` | float[3][3] | optional| D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
-| `label` | string | optional | Optional scan loop label for this instance (e.g., for slice or contrast indexing). |
+| `label` | string | optional | Optional execution stream label for this instance (e.g., for slice or contrast indexing). |
 
 **Notes:**
 - If a virtual segment contains no RF events, `rf_amplitude`, `rf_phase_offset`, and 
@@ -127,7 +127,7 @@ A complete PulSeg representation consists of the following top-level fields:
 | `pulseg_version` | string | required | Version of this specification. Must be `"2.0"` for representations compliant with this document. |
 | `base_blocks` | BaseBlock[] | required | List of all base blocks. Must be non-empty. IDs must be unique. |
 | `virtual_segments` | VirtualSegment[] | required | List of all virtual segments. Must be non-empty. IDs must be unique. |
-| `scan_loop` | SegmentInstance[] | required | Ordered list of segment instances defining the complete scan execution. Must be non-empty. |
+| `execution_stream` | SegmentInstance[] | required | Ordered list of segment instances defining the complete scan execution. Must be non-empty. |
 | `source_file` | string | optional | Path or filename of the source Pulseq `.seq` file from which this representation was generated. |
 | `creation_date` | string | optional | ISO 8601 date string (e.g., `"2025-02-20"`) indicating when this representation was created. |
 
@@ -144,7 +144,7 @@ Conversion from a Pulseq `.seq` file to PulSeg proceeds in three steps:
 2. **Identify segments** — Group consecutive base blocks into virtual segments. Segment 
    boundaries must be explicitly annotated in the Pulseq file using the PulSeg labeling 
    convention (see Section 4.2).
-3. **Build the scan loop** — For each instance of each virtual segment in the Pulseq 
+3. **Build the execution stream** — For each instance of each virtual segment in the Pulseq 
    block stream, record the physical amplitude, phase, and frequency parameters as a 
    segment instance.
 
@@ -168,7 +168,7 @@ The following requirements apply to any compliant Pulseq-to-PulSeg conversion:
 - All base block waveforms MUST be normalized according to the rules in Section 3.1
 - Every virtual segment MUST have a unique ID
 - Every base block MUST have a unique ID
-- The scan loop MUST account for every block in the source Pulseq file (conversion is lossless)
+- The execution stream MUST account for every block in the source Pulseq file (conversion is lossless)
 - The `pulseg_version` field MUST be set to the version of this specification
 - Amplitude scaling factors MUST be such that: physical amplitude = normalized amplitude × scale factor
 
@@ -179,7 +179,7 @@ The following requirements apply to any compliant Pulseq-to-PulSeg conversion:
 ![Intermediate Representation](./spec-diagram.png)
 
 *Figure 1. Schematic of the PulSeg intermediate representation, showing the relationship 
-between base blocks, virtual segments, and segment instances in the scan loop.*
+between base blocks, virtual segments, and segment instances in the execution stream.*
 
 ---
 
