@@ -1,4 +1,4 @@
-function loop = getdynamics(block, segmentID, parentBlockID, physioTrigger, parentBlock)
+function loop = getdynamics(block, segmentID, parentBlockID, physioTrigger, base_block)
 % Return vector containing waveform amplitudes, RF/ADC phase, etc,
 % for a Pulseq block, in physical (Pulseq) units.
 %
@@ -24,7 +24,7 @@ R = eye(3);
 GAM = 4257.6;   % Hz/Gauss
 
 if ~isempty(block.rf)
-    assert(~isempty(parentBlock.rf), ...
+    assert(~isempty(base_block.rf), ...
         sprintf('(virtual segment %d) Expected RF event not found in base block %d', segmentID, parentBlockID));
     rfamp = max(abs(block.rf.signal));
     rfphs = block.rf.phaseOffset;
@@ -34,7 +34,7 @@ end
 for ax = {'gx','gy','gz'}
     g = block.(ax{1});
     if ~isempty(g)
-        assert(~isempty(parentBlock.(ax{1})), ...
+        assert(~isempty(base_block.(ax{1})), ...
             sprintf('(virtual segment %d) Expected %s event not found in base block %d', segmentID, ax{1}, parentBlockID));
         if strcmp(g.type, 'trap')
             amp.(ax{1}) = g.amplitude;
@@ -50,7 +50,7 @@ for ax = {'gx','gy','gz'}
             % Need to check polarity (sign) with respect to parent block.
             % In the interpreter, the waveform shape that is loaded
             % is pb.g.waveform/max(abs(pb.g.waveform))
-            w1 = parentBlock.(ax{1}).waveform;  % Pulseq gradient event, in physical units
+            w1 = base_block.(ax{1}).waveform;  % Pulseq gradient event, in physical units
             w2 = w1 / max(abs(w1)); % this is the (normalized) shape that is loaded into waveform memory in interpreter
             if w2 .* g.waveform < 1
                 amp.(ax{1}) = -amp.(ax{1});
@@ -60,7 +60,7 @@ for ax = {'gx','gy','gz'}
 end
 
 if ~isempty(block.adc)
-    assert(~isempty(parentBlock.adc), ...
+    assert(~isempty(base_block.adc), ...
         sprintf('(virtual segment %d) Expected ADC event not found in base block %d', segmentID, parentBlockID));
     recphs = block.adc.phaseOffset;
     rffreq = block.adc.freqOffset;   % save ADC frequency for ADC events
