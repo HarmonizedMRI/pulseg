@@ -60,7 +60,7 @@ migration notes in the changelog (see Section 7).
 
 ## 3. Data Structures
 
-All field names use snake\_case. Fields marked **(required)** must be present in any 
+All field names use snake_case. Fields marked **(required)** must be present in any 
 compliant PulSeg representation. Fields marked **(optional)** may be omitted.
 
 ### 3.1 BaseBlock
@@ -69,9 +69,16 @@ A base block wraps a single Pulseq block with normalized waveform amplitudes.
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `id` | int | required | Unique identifier for this base block. Must be a positive integer. |
+| `id` | int | required | Unique identifier for this base block. Must be a non-negative integer. IDs 0 and 1 are globally reserved (see Reserved Identifiers below). User-defined blocks must use IDs ≥ 2. |
 | `block` | PulseqBlock | required | A Pulseq block with all waveform amplitudes normalized to 1.0 (or 0.0 for unused channels). See normalization rules below. |
 | `name` | string | optional | Human-readable descriptive label (e.g., `"rf_prep"`, `"gx_spoil"`). |
+
+**Reserved Identifiers:**  
+To support real-time timing optimizations on scanner hardware, the following base block IDs are globally reserved and implicitly defined across all PulSeg implementations:
+
+- id == 0 (Implicit Constant Delay Block): Represents a pure delay block whose duration remains fixed and invariant across all instances in the execution stream. This allows hardware interpreters to pre-compute structural timing gaps.
+
+- id == 1 (Implicit Variable Delay Block): Represents a pure delay block whose duration can vary dynamically between different instances in the execution stream (e.g., for extending TE or TR). The runtime duration is dictated explicitly by the corresponding entry in the instance's block_duration array.
 
 **Normalization rules:**
 - Single-channel RF waveforms: Normalize by peak magnitude, such that `max(|rf.signal|) == 1.0`.
