@@ -2,16 +2,15 @@ function pulseg_ir = import(seqarg, varargin)
 % IMPORT Convert a Pulseq (.seq) file or sequence object to a PulSeg IR struct.
 %
 % Syntax:
-%   pulseg_ir = pulseg.import(seqarg, 'verbose', true)
+%   pulseg_ir = pulseg.import(seq)
 %
 % Input
-%   seqarg     a Pulseq sequence object, or name of a .seq file
+%   seq      A Pulseq sequence object, or name of a .seq file
 %
 % Input options with defaults
 %   verbose               true/FALSE    Print some info to the terminal
 %   usesRotationEvents    TRUE/false    If false, this script tries to estimate 
 %                                       in plane (2D, x-y) rotations from the gradient shapes.
-%
 % Output
 %   pulseg_ir        PulSeq sequence struct, see github/HarmonizedMRI/pulseg/docs/spec.md
 
@@ -90,29 +89,29 @@ textprogressbar('');
 nBlocksPerTridLabel = diff([tridLabels.index pulseg_ir.nMax+1]);
 pulseg_ir.nSegments = length(uniqueTridLabels);
 for i = 1:pulseg_ir.nSegments
-    pulseg_ir.virtual_segments(i).nBlocksInSegment = nBlocksPerTridLabel(I(i));
+    pulseg_ir.virtual_segments(i).n_blocks_in_segment = nBlocksPerTridLabel(I(i));
     pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
     pulseg_ir.virtual_segments(i).ID = i;
-    pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.virtual_segments(i).nBlocksInSegment-1];
+    pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.virtual_segments(i).n_blocks_in_segment-1];
 end
 
 
 %% Detect variable delay blocks
-pulseg_ir.nParentBlocks = 0;
-maxnBlocksInSegment = 0;
+pulseg_ir.n_base_blocks = 0;
+max_n_blocks_in_segment = 0;
 for i = 1:pulseg_ir.nSegments
-    if pulseg_ir.virtual_segments(i).nBlocksInSegment > maxnBlocksInSegment
-        maxnBlocksInSegment = pulseg_ir.virtual_segments(i).nBlocksInSegment;
+    if pulseg_ir.virtual_segments(i).n_blocks_in_segment > max_n_blocks_in_segment
+        max_n_blocks_in_segment = pulseg_ir.virtual_segments(i).n_blocks_in_segment;
     end
 end
-isVariableDelay = false(pulseg_ir.nSegments, maxnBlocksInSegment);
-blockDuration = -ones(pulseg_ir.nSegments, maxnBlocksInSegment); % block instance durations
+isVariableDelay = false(pulseg_ir.nSegments, max_n_blocks_in_segment);
+blockDuration = -ones(pulseg_ir.nSegments, max_n_blocks_in_segment); % block instance durations
 n = tridLabels.index(1);  % start of first segment instance
 
 while n < pulseg_ir.nMax + 1
     i = find(uniqueTridLabels == trids(n));  % segment array index
 
-    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
         b = seq.getBlock(n);
         T = getblocktype(b);
@@ -135,14 +134,14 @@ while n < pulseg_ir.nMax + 1
 end
 
 
-%% Get parent blocks, by parsing first instance of each segment.
-%% Also fill in the sequence of parent blocks for each segment.
-%% Static pure delay blocks are assigned parent block ID = 0
-%% Variable pure delay blocks are assigned parent block ID = -1
+%% Get base blocks, by parsing first instance of each segment.
+%% Also fill in the sequence of base blocks for each segment.
+%% Static pure delay blocks are assigned base block ID = 0
+%% Variable pure delay blocks are assigned base block ID = -1
 
 for i = 1:pulseg_ir.nSegments
 
-    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
         n = pulseg_ir.virtual_segments(i).rows(j);
 
@@ -152,7 +151,7 @@ for i = 1:pulseg_ir.nSegments
         % Pure delay block identification
         if T(4) == 1
             if isVariableDelay(i,j)
-                pulseg_ir.virtual_segments(i).blockIDs(j) = 1; % Implicit Variable Delay
+                pulseg_ir.virtual_segments(i).blockIDs(j) = -1; % Implicit Variable Delay
             else
                 pulseg_ir.virtual_segments(i).blockIDs(j) = 0; % Implicit Constant Delay
             end
@@ -160,9 +159,9 @@ for i = 1:pulseg_ir.nSegments
         end
 
         % Not a pure delay block.
-        % Now check if block is similar to an existing parent block
+        % Now check if block is similar to an existing base block
         issame = false;
-        for p = 1:pulseg_ir.nParentBlocks
+        for p = 1:pulseg_ir.n_base_blocks
             np = pulseg_ir.base_blocks(p).row; 
             if compareblocks(seq, blockEvents(n,:), blockEvents(np,:), n, np)
                 issame = true;
@@ -171,21 +170,22 @@ for i = 1:pulseg_ir.nSegments
             end
         end
 
-        % If not similar, add as a new parent block
+        % If not similar, add as a new base block
         if ~issame
             if arg.verbose
-                fprintf('\nFound new parent block on line %d\n', n);
+                fprintf('\nFound new base block on line %d\n', n);
             end
-            pulseg_ir.nParentBlocks = pulseg_ir.nParentBlocks + 1;
-            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).row = n;
-            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block = b;
-            pulseg_ir.base_blocks(pulseg_ir.nParentBlocks).block.ID = pulseg_ir.nParentBlocks;
-            pulseg_ir.virtual_segments(i).blockIDs(j) = pulseg_ir.nParentBlocks;
+            pulseg_ir.n_base_blocks = pulseg_ir.n_base_blocks + 1;
+            assigned_id = pulseg_ir.n_base_blocks + 1;
+            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).row = n;
+            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block = b;
+            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block.ID = pulseg_ir.n_base_blocks;
+            pulseg_ir.virtual_segments(i).blockIDs(j) = pulseg_ir.n_base_blocks;
         end
     end
 end
 
-for p = 1:pulseg_ir.nParentBlocks
+for p = 1:pulseg_ir.n_base_blocks
     pulseg_ir.base_blocks(p).ID = p;
 end
 
@@ -214,13 +214,15 @@ while n < pulseg_ir.nMax + 1
 
     R = eye(3);  % default rotation for this segment
 
-    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
         b = seq.getBlock(n);
 
         % get cardiac trigger
         T = getblocktype(b);
         physioTrigger = T(3);
-        p = pulseg_ir.virtual_segments(i).blockIDs(j);  % parent block index
+
+        % base block index
+        p = pulseg_ir.virtual_segments(i).blockIDs(j);  
 
         if p < 1  
             % pure delay block (constant or variable)
@@ -232,25 +234,9 @@ while n < pulseg_ir.nMax + 1
         end
 
         % Get rotation
-        if arg.usesRotationEvents
-            if isfield(b, 'rotation')
-                if strcmp(b.rotation.type, 'rot3D')
-                    R = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
-                end
-            end
-        else
-            % try to detect 2D rotations by analyzing the gradient shapes
-            [Rtmp, scale] = getrotation(b, pulseg_ir.base_blocks(p).block);
-            
-            if ~isempty(Rtmp)
-                if norm(Rtmp - eye(3), "fro") > 1e-6
-                    % Found a non-identiy rotation, so use it
-                    % (unless overwritten by a later block in this segment)
-                    R = Rtmp;
-
-                    % set gradient amplitudes equal to those in the parent block (possibly scaled)
-                    pulseg_ir.loop(n, [6 8 10]) = scale * pulseg_ir.loop(pulseg_ir.base_blocks(p).row, [6 8 10]);
-                end
+        if isfield(b, 'rotation')
+            if strcmp(b.rotation.type, 'rot3D')
+                R = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
             end
         end
 
@@ -283,15 +269,15 @@ n = 1;
 while n < pulseg_ir.nMax
     i = pulseg_ir.loop(n, 1);  % segment index
 
-    if (n + pulseg_ir.virtual_segments(i).nBlocksInSegment) > pulseg_ir.nMax
+    if (n + pulseg_ir.virtual_segments(i).n_blocks_in_segment) > pulseg_ir.nMax
         break;
     end
 
     % loop through blocks in segment
-    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
-        % compare parent block id in pulseg_ir.loop against block id in pulseg_ir.virtual_segments(i)
-        p = pulseg_ir.loop(n, 2);  % parent block id
+        % compare base block id in pulseg_ir.loop against block id in pulseg_ir.virtual_segments(i)
+        p = pulseg_ir.loop(n, 2);  % base block id
         p_ij = pulseg_ir.virtual_segments(i).blockIDs(j);
         msg = ['Sequence contains inconsistent segment definitions. ' ...
                'This may occur due to programming error (possibly fatal), ' ...
@@ -300,7 +286,7 @@ while n < pulseg_ir.nMax
                'Often, a solution to this is to scale gradients to "eps" instead of ' ...
                'identically zero, when calling mr.scaleGrad().'];
         if p ~= p_ij
-            warning(sprintf('%s\nExpected parent block ID %d, found %d (block %d)', msg, p_ij, p, n));
+            warning(sprintf('%s\nExpected base block ID %d, found %d (block %d)', msg, p_ij, p, n));
         end
 
         n = n + 1;
@@ -325,7 +311,7 @@ while n < pulseg_ir.nMax
     i = pulseg_ir.loop(n, 1);  % segment index
     Etmp.gx = 0; Etmp.gy = 0; Etmp.gz = 0;
     nFirst = n;
-    for j = 1:pulseg_ir.virtual_segments(i).nBlocksInSegment  
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment  
         Etmp.gx = Etmp.gx + pulseg_ir.loop(n, 11);
         Etmp.gy = Etmp.gy + pulseg_ir.loop(n, 12);
         Etmp.gz = Etmp.gz + pulseg_ir.loop(n, 13);
