@@ -316,3 +316,75 @@ while n < pulseg_ir.nMax
     end
 end
 
+return
+
+%% Create execution_stream per PulSeg 2.0 specification
+
+% Pre-allocate the structured array of segment instances
+nInstances = length(tridLabels.val);
+pulseg_ir.execution_stream = struct(...
+    'virtual_segment_id', cell(1, nInstances), ...
+    'rf_amplitude', cell(1, nInstances), ...
+    'rf_phase_offset', cell(1, nInstances), ...
+    'rf_frequency_offset', cell(1, nInstances), ...
+    'gradient_amplitude', cell(1, nInstances), ...
+    'adc_phase_offset', cell(1, nInstances), ...
+    'block_duration', cell(1, nInstances), ...
+    'rotation_matrix', cell(1, nInstances), ...
+    'physio_trigger', cell(1, nInstances) ...
+);
+
+% While stepping through the sequence timeline row by row:
+instance_idx = 1;
+n = tridLabels.index(1);
+
+while n < pulseg_ir.nMax + 1
+    i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
+
+    % Initialize instance collector arrays
+    rf_amp = []; rf_phase = []; rf_freq = [];
+    grad_amp = []; adc_phase = []; durations = [];
+    physio_trig_flag = 0;
+
+    % Step through the blocks contained inside this specific segment instance
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
+        b = seq.getBlock(n);
+        T = getblocktype(b);
+
+        % Accumulate per-event parameters as specified in spec.md Section 3.3
+        durations(end+1) = b.blockDuration;
+        if T(3) == 1, physio_trig_flag = 1; end % Set binary trigger flag if any block asks for it
+
+        % Extract RF scales if present
+        if ~isempty(b.rf)
+            rf_amp(end+1) = max(abs(b.rf.signal)); % Scale factor calculation
+            rf_phase(end+1) = b.rf.phaseOffset;
+            rf_freq(end+1) = b.rf.freqOffset;
+        end
+
+        % Extract Gradient scaling triplets (Gx, Gy, Gz)
+        % Note: Multiply by rotation or scale matrices according to your algorithm
+        if ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz)
+            grad_amp(:, end+1) = [get_grad_scale(b.gx); get_grad_scale(b.gy); get_grad_scale(b.gz)];
+        end
+
+        if ~isempty(b.adc)
+            adc_phase(end+1) = b.adc.phaseOffset;
+        end
+
+        n = n + 1;
+    end
+
+    % Populate the finalized instance structure
+    pulseg_ir.execution_stream(instance_idx).virtual_segment_id = i;
+    pulseg_ir.execution_stream(instance_idx).rf_amplitude = rf_amp;
+    pulseg_ir.execution_stream(instance_idx).rf_phase_offset = rf_phase;
+    pulseg_ir.execution_stream(instance_idx).rf_frequency_offset = rf_freq;
+    pulseg_ir.execution_stream(instance_idx).gradient_amplitude = grad_amp;
+    pulseg_ir.execution_stream(instance_idx).adc_phase_offset = adc_phase;
+    pulseg_ir.execution_stream(instance_idx).block_duration = durations;
+    pulseg_ir.execution_stream(instance_idx).physio_trigger = physio_trig_flag;
+    pulseg_ir.execution_stream(instance_idx).rotation_matrix = R_final; % Packed 3x3
+
+    instance_idx = instance_idx + 1;
+end
