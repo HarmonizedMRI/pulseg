@@ -13,6 +13,11 @@ function scale = get_grad_scale(g)
 %   - Trapezoid gradients (g.type == 'trap')
 %   - Arbitrary gradients (g.type == 'grad')
 
+    if isempty(g)
+        scale = 0.0;
+        return;
+    end
+
     if ~isstruct(g)
         error('get_grad_scale:invalidInput', 'Input must be a Pulseq gradient structure.');
     end
