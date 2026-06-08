@@ -184,65 +184,91 @@ for p = 1:pulseg_ir.n_base_blocks
     pulseg_ir.base_blocks(p).ID = p;
 end
 
-%% Get dynamic scan information, including cardiac trigger
-%% and gradient rotation.
-%% NB! The last block with non-identity rotation in a segment 
-%% determines the rotation for the whole segment.
-pulseg_ir.loop = zeros(pulseg_ir.nMax, 23);
-physioTrigger = false;
-n = tridLabels.index(1);  % start of first segment instance
-textprogressbar('import(): Getting dynamic scan information: ');
+%% Create execution_stream per PulSeg 2.0 specification
+
+% Pre-allocate the structured array of segment instances
+nInstances = length(tridLabels.val);
+pulseg_ir.execution_stream = struct(...
+    'virtual_segment_id', cell(1, nInstances), ...
+    'rf_amplitude', cell(1, nInstances), ...
+    'rf_phase_offset', cell(1, nInstances), ...
+    'rf_frequency_offset', cell(1, nInstances), ...
+    'gradient_amplitude', cell(1, nInstances), ...
+    'adc_phase_offset', cell(1, nInstances), ...
+    'block_duration', cell(1, nInstances), ...
+    'rotation_matrix', cell(1, nInstances), ...
+    'physio_trigger', cell(1, nInstances) ...
+);
+
+% While stepping through the sequence timeline row by row:
+instance_idx = 1;
+n = tridLabels.index(1);
+
 while n < pulseg_ir.nMax + 1
-    textprogressbar(n/pulseg_ir.nMax*100);
-    
-    b = seq.getBlock(n);
+    i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
 
-    % skip if this block is not the first block in segment instance
-    if trids(n) == 0 
-        n = n + 1;
-        continue;
-    end
+    % Initialize instance collector arrays
+    rf_amp = []; rf_phase = []; rf_freq = [];
+    grad_amp = []; adc_phase = []; durations = [];
+    R = [];
+    physio_trig_flag = 0;
 
-    % Step through blocks in segment instance
-    physioTrigger = false;
-    i = find(uniqueTridLabels == trids(n));  % segment array index
-
+    % Step through the blocks contained inside this specific segment instance
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
         b = seq.getBlock(n);
 
-        % get cardiac trigger
-        T = getblocktype(b);
-        physioTrigger = T(3);
+        % Accumulate per-event parameters as specified in spec.md Section 3.3
+        durations(end+1) = b.blockDuration;
 
-        % base block index
-        p = pulseg_ir.virtual_segments(i).blockIDs(j);  
-
-        if p < 1  
-            % pure delay block (constant or variable)
-            pulseg_ir.loop(n,:) = getdynamics(b, i, p, physioTrigger, []);
-            n = n + 1;
-            continue;
-        else
-            pulseg_ir.loop(n,:) = getdynamics(b, i, p, physioTrigger, pulseg_ir.base_blocks(p).block);
+        % Cardiac trigger
+        if isfield(b, 'trig') & ~physio_trig_flag
+            if strcmp(block.trig.channel, 'physio1')
+                physio_trig_flag = 1;  % Set binary trigger flag if any block asks for it
+            end
         end
 
-        % set rotation
+        % Extract RF scales if present
+        if ~isempty(b.rf)
+            rf_amp(end+1) = max(abs(b.rf.signal)); % Scale factor calculation
+            rf_phase(end+1) = b.rf.phaseOffset;
+            rf_freq(end+1) = b.rf.freqOffset;
+        end
+
+        % Extract Gradient scaling triplets (Gx, Gy, Gz)
+        if ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz)
+            grad_amp(:, end+1) = [get_grad_scale(b.gx); get_grad_scale(b.gy); get_grad_scale(b.gz)];
+        end
+
+        % Extract ADC phase offsets
+        if ~isempty(b.adc)
+            adc_phase(end+1) = b.adc.phaseOffset;
+        end
+
+        % Extract rotation matrix
         if isfield(b, 'rotation')
             if strcmp(b.rotation.type, 'rot3D')
-                R = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
+                R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
             end
         else
-            R = eye(3);  % default rotation for this block
+            R(:,:,end+1) = eye(3); 
         end
-
-        R = R';
-        pulseg_ir.loop(n-1, 15:23) = R(:)';   % write R in row-major order
 
         n = n + 1;
     end
+
+    % Populate the finalized instance structure
+    pulseg_ir.execution_stream(instance_idx).virtual_segment_id = i;
+    pulseg_ir.execution_stream(instance_idx).rf_amplitude = rf_amp;
+    pulseg_ir.execution_stream(instance_idx).rf_phase_offset = rf_phase;
+    pulseg_ir.execution_stream(instance_idx).rf_frequency_offset = rf_freq;
+    pulseg_ir.execution_stream(instance_idx).gradient_amplitude = grad_amp;
+    pulseg_ir.execution_stream(instance_idx).adc_phase_offset = adc_phase;
+    pulseg_ir.execution_stream(instance_idx).block_duration = durations;
+    pulseg_ir.execution_stream(instance_idx).physio_trigger = physio_trig_flag;
+    pulseg_ir.execution_stream(instance_idx).rotation_matrix = R; % Packed 3x3
+
+    instance_idx = instance_idx + 1;
 end
-textprogressbar(100);
-textprogressbar('');
 
 
 %% Set sequence duration
@@ -318,88 +344,3 @@ while n < pulseg_ir.nMax
     end
 end
 
-
-%% Create execution_stream per PulSeg 2.0 specification
-
-% Pre-allocate the structured array of segment instances
-nInstances = length(tridLabels.val);
-pulseg_ir.execution_stream = struct(...
-    'virtual_segment_id', cell(1, nInstances), ...
-    'rf_amplitude', cell(1, nInstances), ...
-    'rf_phase_offset', cell(1, nInstances), ...
-    'rf_frequency_offset', cell(1, nInstances), ...
-    'gradient_amplitude', cell(1, nInstances), ...
-    'adc_phase_offset', cell(1, nInstances), ...
-    'block_duration', cell(1, nInstances), ...
-    'rotation_matrix', cell(1, nInstances), ...
-    'physio_trigger', cell(1, nInstances) ...
-);
-
-% While stepping through the sequence timeline row by row:
-instance_idx = 1;
-n = tridLabels.index(1);
-
-while n < pulseg_ir.nMax + 1
-    i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
-
-    % Initialize instance collector arrays
-    rf_amp = []; rf_phase = []; rf_freq = [];
-    grad_amp = []; adc_phase = []; durations = [];
-    physio_trig_flag = 0;
-
-    % Step through the blocks contained inside this specific segment instance
-    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
-        b = seq.getBlock(n);
-
-        % Accumulate per-event parameters as specified in spec.md Section 3.3
-        durations(end+1) = b.blockDuration;
-
-        % Cardiac trigger
-        if isfield(b, 'trig') & ~physio_trig_flag
-            if strcmp(block.trig.channel, 'physio1')
-                physio_trig_flag = 1;  % Set binary trigger flag if any block asks for it
-            end
-        end
-
-        % Extract RF scales if present
-        if ~isempty(b.rf)
-            rf_amp(end+1) = max(abs(b.rf.signal)); % Scale factor calculation
-            rf_phase(end+1) = b.rf.phaseOffset;
-            rf_freq(end+1) = b.rf.freqOffset;
-        end
-
-        % Extract Gradient scaling triplets (Gx, Gy, Gz)
-        if ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz)
-            grad_amp(:, end+1) = [get_grad_scale(b.gx); get_grad_scale(b.gy); get_grad_scale(b.gz)];
-        end
-
-        % Extract ADC phase offsets
-        if ~isempty(b.adc)
-            adc_phase(end+1) = b.adc.phaseOffset;
-        end
-
-        % Extract rotation matrix
-        if isfield(b, 'rotation')
-            if strcmp(b.rotation.type, 'rot3D')
-                R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
-            end
-        else
-            R(:,:,end+1) = eye(3); 
-        end
-
-        n = n + 1;
-    end
-
-    % Populate the finalized instance structure
-    pulseg_ir.execution_stream(instance_idx).virtual_segment_id = i;
-    pulseg_ir.execution_stream(instance_idx).rf_amplitude = rf_amp;
-    pulseg_ir.execution_stream(instance_idx).rf_phase_offset = rf_phase;
-    pulseg_ir.execution_stream(instance_idx).rf_frequency_offset = rf_freq;
-    pulseg_ir.execution_stream(instance_idx).gradient_amplitude = grad_amp;
-    pulseg_ir.execution_stream(instance_idx).adc_phase_offset = adc_phase;
-    pulseg_ir.execution_stream(instance_idx).block_duration = durations;
-    pulseg_ir.execution_stream(instance_idx).physio_trigger = physio_trig_flag;
-    pulseg_ir.execution_stream(instance_idx).rotation_matrix = R; % Packed 3x3
-
-    instance_idx = instance_idx + 1;
-end
