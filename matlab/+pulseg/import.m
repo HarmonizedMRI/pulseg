@@ -18,17 +18,21 @@ function pulseg_ir = import(seqarg, varargin)
 % n, row        row index in .seq file
 % i             segment array index, starting from 1
 % j             block number within a segment, starting from 1
+% s             virtual segment index, starting from 1
 
 import pulseg.*
 
+pulseg_ir.pulseg_version = '2.0';
 
-%% parse inputs
+if ischar(seqarg) || isstring(seqarg)
+    pulseg_ir.source_file = char(seqarg);
+end
 
-% defaults
+pulseg_ir.creation_date = char(datetime('today', 'Format', 'yyyy-MM-dd'));
+
+% default inputs and user-specified overrides
 arg.verbose = false;
 arg.usesRotationEvents = true;
-
-% Substitute specified system values as appropriate (from MIRT toolbox)
 arg = vararg_pair(arg, varargin);
 
 
@@ -52,26 +56,26 @@ pulseg_ir.nMax = size(blockEvents, 1);
 
 
 %% Get TRID labels and corresponding row indices for all segment instances
-nTRIDlabels = 0;
+n_trid_labels = 0;
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
-pulseg_ir.nReadouts = 0;
+pulseg_ir.n_adc = 0;
 for n = 1:pulseg_ir.nMax
     textprogressbar(n/pulseg_ir.nMax*100);
 
     b = seq.getBlock(n);
 
     if ~isempty(b.adc)
-        pulseg_ir.nReadouts = pulseg_ir.nReadouts + 1;
+        pulseg_ir.n_adc = pulseg_ir.n_adc + 1;
     end
 
     % get TRID label if present
     if isfield(b, 'label') 
         for ii = 1:length(b.label)
             if strcmp(b.label(ii).label, 'TRID')
-                nTRIDlabels = nTRIDlabels + 1;
-                tridLabels.val(nTRIDlabels) = b.label(ii).value;
+                n_trid_labels = n_trid_labels + 1;
+                tridLabels.val(n_trid_labels) = b.label(ii).value;
                 trids(n) = b.label(ii).value;
-                tridLabels.index(nTRIDlabels) = n;
+                tridLabels.index(n_trid_labels) = n;
                 break;
             end
         end
@@ -79,14 +83,14 @@ for n = 1:pulseg_ir.nMax
 end
 textprogressbar(''); 
 
-%% Get list of virtual segments
+%% Get virtual segments
 [uniqueTridLabels, I] = unique(tridLabels.val);
 nBlocksPerTridLabel = diff([tridLabels.index pulseg_ir.nMax+1]);
-pulseg_ir.nSegments = length(uniqueTridLabels);
-for i = 1:pulseg_ir.nSegments
+n_segments = length(uniqueTridLabels);
+for i = 1:n_segments
     pulseg_ir.virtual_segments(i).n_blocks_in_segment = nBlocksPerTridLabel(I(i));
     pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
-    pulseg_ir.virtual_segments(i).ID = i;
+    pulseg_ir.virtual_segments(i).id = i;
     pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.virtual_segments(i).n_blocks_in_segment-1];
 end
 
@@ -94,13 +98,13 @@ end
 %% Detect variable delay blocks
 pulseg_ir.n_base_blocks = 0;
 max_n_blocks_in_segment = 0;
-for i = 1:pulseg_ir.nSegments
+for i = 1:n_segments
     if pulseg_ir.virtual_segments(i).n_blocks_in_segment > max_n_blocks_in_segment
         max_n_blocks_in_segment = pulseg_ir.virtual_segments(i).n_blocks_in_segment;
     end
 end
-isVariableDelay = false(pulseg_ir.nSegments, max_n_blocks_in_segment);
-blockDuration = -ones(pulseg_ir.nSegments, max_n_blocks_in_segment); % block instance durations
+isVariableDelay = false(n_segments, max_n_blocks_in_segment);
+blockDuration = -ones(n_segments, max_n_blocks_in_segment); % block instance durations
 n = tridLabels.index(1);  % start of first segment instance
 
 while n < pulseg_ir.nMax + 1
@@ -129,12 +133,9 @@ while n < pulseg_ir.nMax + 1
 end
 
 
-%% Get base blocks, by parsing first instance of each segment.
-%% Also fill in the sequence of base blocks for each segment.
-%% Static pure delay blocks are assigned base block ID = 0
-%% Variable pure delay blocks are assigned base block ID = -1
+%% Get base blocks, by parsing first instance of each segment
 
-for i = 1:pulseg_ir.nSegments
+for i = 1:n_segments
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
@@ -146,9 +147,9 @@ for i = 1:pulseg_ir.nSegments
         % Pure delay block identification
         if T(4) == 1
             if isVariableDelay(i,j)
-                pulseg_ir.virtual_segments(i).blockIDs(j) = -1; % Implicit Variable Delay
+                pulseg_ir.virtual_segments(i).base_block_ids(j) = -1; % Implicit Variable Delay
             else
-                pulseg_ir.virtual_segments(i).blockIDs(j) = 0; % Implicit Constant Delay
+                pulseg_ir.virtual_segments(i).base_block_ids(j) = 0; % Implicit Constant Delay
             end
             continue;
         end
@@ -160,7 +161,7 @@ for i = 1:pulseg_ir.nSegments
             np = pulseg_ir.base_blocks(p).row; 
             if compareblocks(seq, blockEvents(n,:), blockEvents(np,:), n, np)
                 issame = true;
-                pulseg_ir.virtual_segments(i).blockIDs(j) = p;
+                pulseg_ir.virtual_segments(i).base_block_ids(j) = pulseg_ir.base_blocks(p).id;
                 break;
             end
         end
@@ -171,18 +172,15 @@ for i = 1:pulseg_ir.nSegments
                 fprintf('\nFound new base block on line %d\n', n);
             end
             pulseg_ir.n_base_blocks = pulseg_ir.n_base_blocks + 1;
-            assigned_id = pulseg_ir.n_base_blocks + 1;
+            assigned_id = pulseg_ir.n_base_blocks + 0;
             pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).row = n;
-            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block = b;
-            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block.ID = pulseg_ir.n_base_blocks;
-            pulseg_ir.virtual_segments(i).blockIDs(j) = pulseg_ir.n_base_blocks;
+            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block = normalize_block(b);
+            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).id = assigned_id;
+            pulseg_ir.virtual_segments(i).base_block_ids(j) = assigned_id;
         end
     end
 end
 
-for p = 1:pulseg_ir.n_base_blocks
-    pulseg_ir.base_blocks(p).ID = p;
-end
 
 %% Create execution_stream per PulSeg 2.0 specification
 
@@ -204,7 +202,10 @@ pulseg_ir.execution_stream = struct(...
 instance_idx = 1;
 n = tridLabels.index(1);
 
+textprogressbar('import(): Getting dynamic scan information: ');
+
 while n < pulseg_ir.nMax + 1
+    textprogressbar(n/pulseg_ir.nMax*100);
     i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
 
     % Initialize instance collector arrays
@@ -222,7 +223,7 @@ while n < pulseg_ir.nMax + 1
 
         % Cardiac trigger
         if isfield(b, 'trig') & ~physio_trig_flag
-            if strcmp(block.trig.channel, 'physio1')
+            if strcmp(b.trig.channel, 'physio1')
                 physio_trig_flag = 1;  % Set binary trigger flag if any block asks for it
             end
         end
@@ -269,47 +270,14 @@ while n < pulseg_ir.nMax + 1
 
     instance_idx = instance_idx + 1;
 end
+textprogressbar(100);
+textprogressbar('');
 
 
 %% Set sequence duration
-% This is a bit inaccurate for now -- doesn't account for ssi time  TODO
 pulseg_ir.duration = seq.duration;
 
-
-%% Remove zero-duration (label-only) blocks from pulseg_ir.loop
-%pulseg_ir.loop(pulseg_ir.loop(:,1) == 0, :) = [];
-%pulseg_ir.nMax = size(pulseg_ir.loop,1);
-
-
-%% Check that the execution of blocks throughout the sequence
-%% is consistent with the segment definitions
-n = 1;
-while n < pulseg_ir.nMax
-    i = pulseg_ir.loop(n, 1);  % segment index
-
-    if (n + pulseg_ir.virtual_segments(i).n_blocks_in_segment) > pulseg_ir.nMax
-        break;
-    end
-
-    % loop through blocks in segment
-    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
-
-        % compare base block id in pulseg_ir.loop against block id in pulseg_ir.virtual_segments(i)
-        p = pulseg_ir.loop(n, 2);  % base block id
-        p_ij = pulseg_ir.virtual_segments(i).blockIDs(j);
-        msg = ['Sequence contains inconsistent segment definitions. ' ...
-               'This may occur due to programming error (possibly fatal), ' ...
-               'or if an arbitrary gradient resembles that from another block ' ...
-               'except with opposite sign or scaled by zero (which is probably ok). ' ...
-               'Often, a solution to this is to scale gradients to "eps" instead of ' ...
-               'identically zero, when calling mr.scaleGrad().'];
-        if p ~= p_ij
-            warning(sprintf('%s\nExpected base block ID %d, found %d (block %d)', msg, p_ij, p, n));
-        end
-
-        n = n + 1;
-    end
-end
+return
 
 %% Gradient heating related calculations
 
@@ -317,7 +285,7 @@ end
 % instance with the largest combined (all axes) gradient energy.
 
 % initialize max energy field
-for i = 1:pulseg_ir.nSegments
+for i = 1:n_segments
     pulseg_ir.virtual_segments(i).Emax.val = 0;
     pulseg_ir.virtual_segments(i).Emax.n = 1;
 end
