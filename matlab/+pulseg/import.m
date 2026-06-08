@@ -19,6 +19,8 @@ function pulseg_ir = import(seqarg, varargin)
 % i             segment array index, starting from 1
 % j             block number within a segment, starting from 1
 
+import pulseg.*
+
 
 %% parse inputs
 
@@ -316,7 +318,6 @@ while n < pulseg_ir.nMax
     end
 end
 
-return
 
 %% Create execution_stream per PulSeg 2.0 specification
 
@@ -349,11 +350,16 @@ while n < pulseg_ir.nMax + 1
     % Step through the blocks contained inside this specific segment instance
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
         b = seq.getBlock(n);
-        T = getblocktype(b);
 
         % Accumulate per-event parameters as specified in spec.md Section 3.3
         durations(end+1) = b.blockDuration;
-        if T(3) == 1, physio_trig_flag = 1; end % Set binary trigger flag if any block asks for it
+
+        % Cardiac trigger
+        if isfield(b, 'trig') & ~physio_trig_flag
+            if strcmp(block.trig.channel, 'physio1')
+                physio_trig_flag = 1;  % Set binary trigger flag if any block asks for it
+            end
+        end
 
         % Extract RF scales if present
         if ~isempty(b.rf)
@@ -363,13 +369,22 @@ while n < pulseg_ir.nMax + 1
         end
 
         % Extract Gradient scaling triplets (Gx, Gy, Gz)
-        % Note: Multiply by rotation or scale matrices according to your algorithm
         if ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz)
             grad_amp(:, end+1) = [get_grad_scale(b.gx); get_grad_scale(b.gy); get_grad_scale(b.gz)];
         end
 
+        % Extract ADC phase offsets
         if ~isempty(b.adc)
             adc_phase(end+1) = b.adc.phaseOffset;
+        end
+
+        % Extract rotation matrix
+        if isfield(b, 'rotation')
+            if strcmp(b.rotation.type, 'rot3D')
+                R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
+            end
+        else
+            R(:,:,end+1) = eye(3); 
         end
 
         n = n + 1;
@@ -384,7 +399,7 @@ while n < pulseg_ir.nMax + 1
     pulseg_ir.execution_stream(instance_idx).adc_phase_offset = adc_phase;
     pulseg_ir.execution_stream(instance_idx).block_duration = durations;
     pulseg_ir.execution_stream(instance_idx).physio_trigger = physio_trig_flag;
-    pulseg_ir.execution_stream(instance_idx).rotation_matrix = R_final; % Packed 3x3
+    pulseg_ir.execution_stream(instance_idx).rotation_matrix = R; % Packed 3x3
 
     instance_idx = instance_idx + 1;
 end
