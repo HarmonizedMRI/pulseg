@@ -238,15 +238,9 @@ while n < pulseg_ir.nMax + 1
 
         n = n + 1;
     end
-
-    % Set rotation for last block in segment instance; 
-    % the interpreter uses this to set the rotation for the whole segment
-    R = R';
-    pulseg_ir.loop(n-1, 15:23) = R(:)';   % write R in row-major order
-
 end
 textprogressbar(100);
-textprogressbar(''); 
+textprogressbar('');
 
 
 %% Set sequence duration
