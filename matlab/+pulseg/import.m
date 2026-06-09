@@ -227,6 +227,8 @@ while n < pulseg_ir.nMax + 1
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
         b = seq.getBlock(n);
 
+        [b0_instance, scales] = pulseg.normalize_block(b);
+
         % Accumulate per-event parameters as specified in spec.md Section 3.3
         durations(end+1) = b.blockDuration;
 
@@ -239,14 +241,15 @@ while n < pulseg_ir.nMax + 1
 
         % Extract RF scales if present
         if ~isempty(b.rf)
-            rf_amp(end+1) = max(abs(b.rf.signal)); % Scale factor calculation
+            rf_amp(end+1) = scales.rf;
             rf_phase(end+1) = b.rf.phaseOffset;
             rf_freq(end+1) = b.rf.freqOffset;
         end
 
         % Extract Gradient scaling triplets (Gx, Gy, Gz)
-        if ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz)
-            grad_amp(:, end+1) = [get_grad_scale(b.gx); get_grad_scale(b.gy); get_grad_scale(b.gz)];
+        has_grad = ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz);
+        if has_grad
+            grad_amp(:, end+1) = scales.grad;
         end
 
         % Extract ADC phase offsets
@@ -255,12 +258,18 @@ while n < pulseg_ir.nMax + 1
         end
 
         % Extract rotation matrix
-        if isfield(b, 'rotation')
-            if strcmp(b.rotation.type, 'rot3D')
-                R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
+        has_grad = ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz);
+
+        if has_grad
+            if isfield(b, 'rotation') && ~isempty(b.rotation)
+                if strcmp(b.rotation.type, 'rot3D')
+                    R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
+                else
+                    R(:,:,end+1) = eye(3);
+                end
+            else
+                R(:,:,end+1) = eye(3);
             end
-        else
-            R(:,:,end+1) = eye(3); 
         end
 
         n = n + 1;
