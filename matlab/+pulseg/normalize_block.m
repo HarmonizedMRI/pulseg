@@ -5,89 +5,56 @@ function [b0, scales] = normalize_block(b)
 %   [b0, scales] = pulseg.normalize_block(b)
 %
 % Description:
-%   NORMALIZE_BLOCK takes a Pulseq block structure and returns a normalized
-%   copy suitable for use as a PulSeg 2.0 BaseBlock. The returned block b0
-%   preserves the waveform shapes, timing, ADC information, and other event
-%   metadata from the input block, but normalizes RF and gradient amplitudes
-%   according to the PulSeg IR specification.
+%   NORMALIZE_BLOCK returns a normalized copy of a Pulseq block and the
+%   amplitude scale factors needed to reconstruct the original physical
+%   block.
 %
-%   RF waveforms are normalized by their global peak magnitude:
+%   RF events are normalized by their global peak magnitude. The RF scale
+%   factor is nonnegative.
 %
-%       max(abs(b0.rf.signal(:))) == 1
+%   Gradient events are normalized independently for gx, gy, and gz. For
+%   gradients, the scale factor is signed. This means that polarity-inverted
+%   gradient waveforms normalize to the same canonical base-block shape and
+%   differ only by the sign of the corresponding entry in scales.grad.
 %
-%   for nonzero RF events. This also supports multi-channel RF/pTx arrays by
-%   using a single global scale factor across all RF samples and channels,
-%   thereby preserving relative amplitudes between transmit channels.
-%
-%   Gradient events are normalized independently for each logical gradient
-%   axis, gx, gy, and gz. If a gradient event contains a sampled waveform
-%   field, the waveform is normalized by its peak absolute value. If it does
-%   not contain a waveform field but contains an amplitude field, the scalar
-%   amplitude is normalized by its absolute value. Empty or missing gradient
-%   channels are left unchanged and receive a scale factor of zero.
+%   This behavior is useful for PulSeg because positive and negative
+%   instances of the same gradient shape can share one BaseBlock.
 %
 % Inputs:
 %   b
-%       Pulseq block structure, typically returned by seq.getBlock(n).
-%       The block may contain fields such as:
-%
-%           b.rf
-%           b.gx
-%           b.gy
-%           b.gz
-%           b.adc
+%       Pulseq block structure, typically from seq.getBlock(n).
 %
 % Outputs:
 %   b0
-%       Normalized copy of the input block. RF and gradient amplitudes are
-%       divided by their corresponding scale factors. Channels with zero
-%       scale factors are left unchanged to avoid division by zero.
+%       Normalized copy of b. RF and gradient amplitudes are normalized.
+%       ADC events and other non-amplitude metadata are copied unchanged.
 %
 %   scales
-%       Structure containing the physical amplitude scale factors removed
-%       from the block:
+%       Struct containing removed amplitude scale factors:
 %
 %           scales.rf
-%               RF peak magnitude scale factor. Empty if no RF event is
-%               present.
+%               RF peak magnitude scale factor. Empty if no RF event exists.
 %
 %           scales.grad
-%               1-by-3 vector of gradient scale factors:
+%               1-by-3 vector of signed gradient scale factors:
 %
 %                   [gx_scale, gy_scale, gz_scale]
 %
-%               A value of zero indicates that the corresponding gradient
-%               channel is absent or has zero amplitude.
+%               Missing or zero-valued gradient channels receive scale 0.
 %
 % Notes:
-%   - ADC events are not normalized and are copied directly into b0.
-%   - RF phase offsets, RF frequency offsets, ADC phase offsets, and ADC
-%     frequency offsets are not modified by this function.
-%   - For PulSeg 2.0, the returned b0 is intended to define waveform shape,
-%     while the returned scale factors are intended to be stored in the
-%     corresponding SegmentInstance amplitude fields.
-%   - This function does not validate scanner hardware limits, slew rates,
-%     dead times, or raster alignment.
-%
-% Example:
-%   b = seq.getBlock(42);
-%   [b0, scales] = pulseg.normalize_block(b);
-%
-%   % Recover original RF signal, for a nonzero RF event:
-%   rf_signal_original = b0.rf.signal * scales.rf;
-%
-%   % Recover original gx waveform, for a nonzero arbitrary gradient:
-%   gx_waveform_original = b0.gx.waveform * scales.grad(1);
-%
-% See also:
-%   pulseg.import
+%   - RF normalization uses magnitude and therefore does not absorb RF phase.
+%   - Gradient normalization uses signed scaling so that globally inverted
+%     gradient waveforms share the same normalized shape.
+%   - ADC events are not normalized.
+%   - This function does not check hardware limits or slew constraints.
 
 b0 = b;
 
 scales.rf = [];
 scales.grad = [0 0 0];
 
-% RF
+%% RF
 if isfield(b, 'rf') && ~isempty(b.rf)
     s = max(abs(b.rf.signal(:)));
     scales.rf = s;
@@ -97,7 +64,7 @@ if isfield(b, 'rf') && ~isempty(b.rf)
     end
 end
 
-% Gradients
+%% Gradients
 grad_fields = {'gx', 'gy', 'gz'};
 
 for a = 1:3
@@ -106,20 +73,29 @@ for a = 1:3
     if isfield(b, gname) && ~isempty(b.(gname))
         g = b.(gname);
 
-        if isfield(g, 'waveform')
-            s = max(abs(g.waveform(:)));
-            scales.grad(a) = s;
+        if isfield(g, 'waveform') && ~isempty(g.waveform)
+            % Use signed value at the peak absolute magnitude.
+            % This makes g and -g normalize to the same canonical shape.
+            [peak_abs, idx] = max(abs(g.waveform(:)));
 
-            if s > 0
+            if peak_abs > 0
+                s = g.waveform(idx);      % signed scale
+                scales.grad(a) = s;
                 b0.(gname).waveform = g.waveform / s;
+            else
+                scales.grad(a) = 0;
             end
 
-        elseif isfield(g, 'amplitude')
-            s = abs(g.amplitude);
-            scales.grad(a) = s;
+        elseif isfield(g, 'amplitude') && ~isempty(g.amplitude)
+            % Scalar/trapezoid-like gradient amplitude.
+            % Preserve polarity in the scale factor.
+            s = g.amplitude;
 
-            if s > 0
-                b0.(gname).amplitude = g.amplitude / s;
+            if s ~= 0
+                scales.grad(a) = s;
+                b0.(gname).amplitude = 1;
+            else
+                scales.grad(a) = 0;
             end
         end
     end
