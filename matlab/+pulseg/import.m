@@ -245,9 +245,18 @@ while n < pulseg_ir.nMax + 1
     i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
 
     % Initialize instance collector arrays
-    rf_amp = []; rf_phase = []; rf_freq = [];
-    grad_amp = []; adc_phase = []; adc_freq = []; durations = [];
+    rf_amp = [];
+    rf_phase = [];
+    rf_freq = [];
+
+    adc_phase = [];
+    adc_freq = [];
+
+    grad_amp = zeros(0, 3);
+    durations = [];
+
     R = zeros(3, 3, 0);
+
     physio_trig_flag = 0;
 
     % Step through the blocks contained inside this specific segment instance
@@ -338,6 +347,7 @@ pulseg.validate_ir(pulseg_ir);
 return
 
 function val = getfield_default(s, fieldname, default)
+% GETFIELD_DEFAULT Return a struct field value or a default if absent/empty.
     if isfield(s, fieldname) && ~isempty(s.(fieldname))
         val = s.(fieldname);
     else
