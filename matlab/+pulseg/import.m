@@ -24,10 +24,6 @@ import pulseg.*
 
 pulseg_ir.pulseg_version = '2.0';
 
-if ischar(seqarg) || isstring(seqarg)
-    pulseg_ir.source_file = char(seqarg);
-end
-
 pulseg_ir.creation_date = char(datetime('today', 'Format', 'yyyy-MM-dd'));
 
 % default inputs and user-specified overrides
@@ -35,13 +31,14 @@ arg.verbose = false;
 arg.usesRotationEvents = true;
 arg = vararg_pair(arg, varargin);
 
-
 %% Get seq object
-if isa(seqarg, 'char')
-    fprintf(sprintf('Reading %s ... ', seqarg));
+if ischar(seqarg) || isstring(seqarg)
+    pulseg_ir.source_file = char(seqarg);
+    seqfile = char(seqarg);
+    if arg.verbose, fprintf('Reading %s ... ', seqfile); end
     seq = mr.Sequence();
-    seq.read(seqarg);
-    fprintf(' done\n');
+    seq.read(seqfile);
+    if arg.verbose, fprintf(' done\n'); end
 else
     assert(isa(seqarg, 'mr.Sequence'), 'First argument is not an mr.Sequence object');
     seq = seqarg;
@@ -59,6 +56,9 @@ pulseg_ir.nMax = size(blockEvents, 1);
 n_trid_labels = 0;
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
 pulseg_ir.n_adc = 0;
+trids = nan(1, pulseg_ir.nMax);
+tridLabels.val = [];
+tridLabels.index = [];
 for n = 1:pulseg_ir.nMax
     textprogressbar(n/pulseg_ir.nMax*100);
 
@@ -82,6 +82,8 @@ for n = 1:pulseg_ir.nMax
     end
 end
 textprogressbar(''); 
+assert(n_trid_labels > 0, ...
+    'No TRID labels found. PulSeg import requires segment boundary labels.');
 
 %% Initialize virtual segments
 [uniqueTridLabels, I] = unique(tridLabels.val);
@@ -164,6 +166,21 @@ for i = 1:n_segments
 
         % Not a pure delay block.
         % Now check if block is similar to an existing base block
+
+        [b0_candidate, ~] = pulseg.normalize_block(b);
+
+        issame = false;
+        for p = 1:pulseg_ir.n_base_blocks
+            b0_existing = pulseg_ir.base_blocks(p).block;
+
+            if pulseg.compare_normalized_blocks(b0_candidate, b0_existing)
+                issame = true;
+                pulseg_ir.virtual_segments(i).base_block_ids(j) = pulseg_ir.base_blocks(p).id;
+                break;
+            end
+        end
+
+        %{
         issame = false;
         for p = 1:pulseg_ir.n_base_blocks
             np = pulseg_ir.base_blocks(p).row; 
@@ -173,6 +190,7 @@ for i = 1:n_segments
                 break;
             end
         end
+        %}
 
         % If not similar, add as a new base block
         if ~issame
@@ -294,39 +312,3 @@ textprogressbar('');
 
 %% Set sequence duration
 pulseg_ir.duration = seq.duration;
-
-return
-
-%% Gradient heating related calculations
-
-% Get block/row index corresponding to the beginning of the segment instance
-% instance with the largest combined (all axes) gradient energy.
-
-% initialize max energy field
-for i = 1:n_segments
-    pulseg_ir.virtual_segments(i).Emax.val = 0;
-    pulseg_ir.virtual_segments(i).Emax.n = 1;
-end
-   
-% find segment instance with max energy
-n = 1;
-while n < pulseg_ir.nMax
-    % Calculate total energy in segment instance
-    i = pulseg_ir.loop(n, 1);  % segment index
-    Etmp.gx = 0; Etmp.gy = 0; Etmp.gz = 0;
-    nFirst = n;
-    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment  
-        Etmp.gx = Etmp.gx + pulseg_ir.loop(n, 11);
-        Etmp.gy = Etmp.gy + pulseg_ir.loop(n, 12);
-        Etmp.gz = Etmp.gz + pulseg_ir.loop(n, 13);
-        n = n + 1;
-    end
-    Etmp.all = Etmp.gx + Etmp.gy + Etmp.gz;
-
-    % update Emax field
-    if Etmp.all > pulseg_ir.virtual_segments(i).Emax.val
-        pulseg_ir.virtual_segments(i).Emax.n = nFirst;
-        pulseg_ir.virtual_segments(i).Emax.val = Etmp.all;
-    end
-end
-
