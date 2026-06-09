@@ -168,7 +168,7 @@ creation, using Pulseq block labels. The labeling convention is as follows:
 - The first block of each segment instance MUST carry a `TRID` label.
 - The value of the `TRID` label identifies the virtual segment instantiated by that segment instance.
 - Blocks following a `TRID`-labeled block are considered part of the same segment instance until the next block carrying a `TRID` label or the end of the sequence.
-- Blocks inside a segment instance SHOULD NOT also carry `TRID` labels.
+- Blocks inside a segment instance MUST NOT also carry `TRID` labels.
 - Repeated occurrences of the same `TRID` value are treated as instances of the same virtual segment and MUST have the same number of Pulseq blocks and the same normalized base-block structure.
 - The first Pulseq block in the source sequence MUST carry a `TRID` label.
 
