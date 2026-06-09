@@ -165,8 +165,9 @@ Segment boundaries are defined by the sequence designer at the time of Pulseq se
 creation, using Pulseq block labels. The labeling convention is as follows:
 
 - The first block of each virtual segment must be labeled with a unique segment identifier
-- Consecutive blocks carrying the same segment identifier, or unlabeled blocks following 
-  a labeled block, are considered part of the same segment
+- Only the first block of each segment instance shall carry the TRID label.
+Unlabeled blocks following a labeled block are considered part of that segment
+until the next labeled block.
 - A new label on any block marks the start of a new segment
 
 *[Note: provide a concrete example here, ideally with a code snippet from a Pulseq sequence 
