@@ -62,6 +62,14 @@ if isfield(b, 'rf') && ~isempty(b.rf)
     if s > 0
         b0.rf.signal = b.rf.signal / s;
     end
+    if isfield(b0.rf, 'phaseOffset'), b0.rf.phaseOffset = 0; end
+    if isfield(b0.rf, 'freqOffset'),  b0.rf.freqOffset  = 0; end
+end
+
+%% ADC
+if isfield(b0, 'adc') && ~isempty(b0.adc)
+    if isfield(b0.adc, 'phaseOffset'), b0.adc.phaseOffset = 0; end
+    if isfield(b0.adc, 'freqOffset'),  b0.adc.freqOffset  = 0; end
 end
 
 %% Gradients
