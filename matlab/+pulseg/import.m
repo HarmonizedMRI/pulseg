@@ -83,15 +83,23 @@ for n = 1:pulseg_ir.nMax
 end
 textprogressbar(''); 
 
-%% Get virtual segments
+%% Initialize virtual segments
 [uniqueTridLabels, I] = unique(tridLabels.val);
-nBlocksPerTridLabel = diff([tridLabels.index pulseg_ir.nMax+1]);
+n_blocks_per_trid_label = diff([tridLabels.index pulseg_ir.nMax+1]);
+
 n_segments = length(uniqueTridLabels);
+
 for i = 1:n_segments
-    pulseg_ir.virtual_segments(i).n_blocks_in_segment = nBlocksPerTridLabel(I(i));
-    pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
+    nBlocks = n_blocks_per_trid_label(I(i));
+
     pulseg_ir.virtual_segments(i).id = i;
-    pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + [0:pulseg_ir.virtual_segments(i).n_blocks_in_segment-1];
+    pulseg_ir.virtual_segments(i).base_block_ids = zeros(1, nBlocks);
+    pulseg_ir.virtual_segments(i).name = sprintf('TRID_%d', tridLabels.val(I(i)));
+
+    % Optional metadata
+    pulseg_ir.virtual_segments(i).n_blocks_in_segment = nBlocks;
+    pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
+    pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + (0:nBlocks-1);
 end
 
 
@@ -139,7 +147,7 @@ for i = 1:n_segments
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
-        n = pulseg_ir.virtual_segments(i).rows(j);
+        n = pulseg_ir.virtual_segments(i).rows(j);  % row index in .seq file
 
         b = seq.getBlock(n);
         T = getblocktype(b);
@@ -147,7 +155,7 @@ for i = 1:n_segments
         % Pure delay block identification
         if T(4) == 1
             if isVariableDelay(i,j)
-                pulseg_ir.virtual_segments(i).base_block_ids(j) = -1; % Implicit Variable Delay
+                pulseg_ir.virtual_segments(i).base_block_ids(j) = 1; % Implicit Variable Delay
             else
                 pulseg_ir.virtual_segments(i).base_block_ids(j) = 0; % Implicit Constant Delay
             end
@@ -172,7 +180,8 @@ for i = 1:n_segments
                 fprintf('\nFound new base block on line %d\n', n);
             end
             pulseg_ir.n_base_blocks = pulseg_ir.n_base_blocks + 1;
-            assigned_id = pulseg_ir.n_base_blocks + 0;
+            pnew = pulseg_ir.n_base_blocks;
+            assigned_id = pnew + 1;  % gives 2, 3, 4, ...
             pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).row = n;
             pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block = normalize_block(b);
             pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).id = assigned_id;
@@ -222,9 +231,9 @@ while n < pulseg_ir.nMax + 1
         durations(end+1) = b.blockDuration;
 
         % Cardiac trigger
-        if isfield(b, 'trig') & ~physio_trig_flag
-            if strcmp(b.trig.channel, 'physio1')
-                physio_trig_flag = 1;  % Set binary trigger flag if any block asks for it
+        if isfield(b, 'trig') && ~isempty(b.trig) && ~physio_trig_flag
+            if isfield(b.trig, 'channel') && strcmp(b.trig.channel, 'physio1')
+                physio_trig_flag = 1;
             end
         end
 
