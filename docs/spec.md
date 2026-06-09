@@ -159,16 +159,18 @@ Conversion from a Pulseq `.seq` file to PulSeg proceeds in three steps:
    block stream, record the physical amplitude, phase, and frequency parameters as a 
    segment instance.
 
-### 4.2 Segment Boundary Annotation
 
-Segment boundaries are defined by the sequence designer at the time of Pulseq sequence 
+### 4.2 Segment Instance Boundary Annotation
+
+Segment instance boundaries are defined by the sequence designer at the time of Pulseq sequence
 creation, using Pulseq block labels. The labeling convention is as follows:
 
-- The first block of each virtual segment must be labeled with a unique segment identifier
-- Only the first block of each segment instance shall carry the TRID label.
-Unlabeled blocks following a labeled block are considered part of that segment
-until the next labeled block.
-- A new label on any block marks the start of a new segment
+- The first block of each segment instance MUST carry a `TRID` label.
+- The value of the `TRID` label identifies the virtual segment instantiated by that segment instance.
+- Blocks following a `TRID`-labeled block are considered part of the same segment instance until the next block carrying a `TRID` label or the end of the sequence.
+- Blocks inside a segment instance SHOULD NOT also carry `TRID` labels.
+- Repeated occurrences of the same `TRID` value are treated as instances of the same virtual segment and MUST have the same number of Pulseq blocks and the same normalized base-block structure.
+- The first Pulseq block in the source sequence MUST carry a `TRID` label.
 
 *[Note: provide a concrete example here, ideally with a code snippet from a Pulseq sequence 
 file and the resulting PulSeg representation.]*
