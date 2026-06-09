@@ -9,8 +9,6 @@ function pulseg_ir = import(seqarg, varargin)
 %
 % Input options with defaults
 %   verbose               true/FALSE    Print some info to the terminal
-%   usesRotationEvents    TRUE/false    If false, this script tries to estimate 
-%                                       in plane (2D, x-y) rotations from the gradient shapes.
 % Output
 %   pulseg_ir        PulSeq sequence struct, see github/HarmonizedMRI/pulseg/docs/spec.md
 
@@ -28,7 +26,6 @@ pulseg_ir.creation_date = char(datetime('today', 'Format', 'yyyy-MM-dd'));
 
 % default inputs and user-specified overrides
 arg.verbose = false;
-arg.usesRotationEvents = true;
 arg = vararg_pair(arg, varargin);
 
 %% Get seq object
@@ -152,7 +149,7 @@ while n < pulseg_ir.nMax + 1
                     n = n + 1;
                     continue;  % go to next j iteration
                 else
-                    error(sprintf('(row %d: segment %d, block %d) Non-delay blocks must have the same duration in all segment instances', n, i, j));
+                    error('(row %d: segment %d, block %d) Non-delay blocks must have the same duration in all segment instances', n, i, j);
                 end
             end
         end
@@ -216,6 +213,9 @@ for i = 1:n_segments
     end
 end
 
+assert(isfield(pulseg_ir, 'base_blocks') && ~isempty(pulseg_ir.base_blocks), ...
+    'PulSeg 2.0 requires at least one explicit base block.');
+
 
 %% Create execution_stream per PulSeg 2.0 specification
 
@@ -228,6 +228,7 @@ pulseg_ir.execution_stream = struct(...
     'rf_frequency_offset', cell(1, nInstances), ...
     'gradient_amplitude', cell(1, nInstances), ...
     'adc_phase_offset', cell(1, nInstances), ...
+    'adc_frequency_offset', cell(1, nInstances), ...
     'block_duration', cell(1, nInstances), ...
     'rotation_matrix', cell(1, nInstances), ...
     'physio_trigger', cell(1, nInstances) ...
@@ -245,8 +246,8 @@ while n < pulseg_ir.nMax + 1
 
     % Initialize instance collector arrays
     rf_amp = []; rf_phase = []; rf_freq = [];
-    grad_amp = []; adc_phase = []; durations = [];
-    R = [];
+    grad_amp = []; adc_phase = []; adc_freq = []; durations = [];
+    R = zeros(3, 3, 0);
     physio_trig_flag = 0;
 
     % Step through the blocks contained inside this specific segment instance
@@ -304,6 +305,7 @@ while n < pulseg_ir.nMax + 1
         % Extract ADC phase offsets
         if ~isempty(b.adc)
             adc_phase(end+1) = getfield_default(b.adc, 'phaseOffset', 0);
+            adc_freq(end+1) = getfield_default(b.adc, 'freqOffset', 0);
         end
 
         n = n + 1;
@@ -316,6 +318,7 @@ while n < pulseg_ir.nMax + 1
     pulseg_ir.execution_stream(instance_idx).rf_frequency_offset = rf_freq;
     pulseg_ir.execution_stream(instance_idx).gradient_amplitude = grad_amp;
     pulseg_ir.execution_stream(instance_idx).adc_phase_offset = adc_phase;
+    pulseg_ir.execution_stream(instance_idx).adc_frequency_offset = adc_freq;
     pulseg_ir.execution_stream(instance_idx).block_duration = durations;
     pulseg_ir.execution_stream(instance_idx).physio_trigger = physio_trig_flag;
     pulseg_ir.execution_stream(instance_idx).rotation_matrix = R; % Packed 3x3
@@ -328,6 +331,9 @@ textprogressbar('');
 
 %% Set sequence duration
 pulseg_ir.duration = seq.duration;
+
+%% Validate the structure against the PulSeg 2.0 specification
+pulseg.validate_ir(pulseg_ir);
 
 return
 
