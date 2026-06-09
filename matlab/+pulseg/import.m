@@ -82,8 +82,12 @@ for n = 1:pulseg_ir.nMax
     end
 end
 textprogressbar(''); 
+
 assert(n_trid_labels > 0, ...
     'No TRID labels found. PulSeg import requires segment boundary labels.');
+
+assert(tridLabels.index(1) == 1, ...
+    'First block must contain a TRID label. Unlabeled preamble blocks are not currently supported.');
 
 %% Initialize virtual segments
 [uniqueTridLabels, I] = unique(tridLabels.val);
@@ -102,6 +106,19 @@ for i = 1:n_segments
     pulseg_ir.virtual_segments(i).n_blocks_in_segment = nBlocks;
     pulseg_ir.virtual_segments(i).TRID = tridLabels.val(I(i));
     pulseg_ir.virtual_segments(i).rows = tridLabels.index(I(i)) + (0:nBlocks-1);
+end
+
+% Check that each segment instance for a given TRID has the same number of blocks
+for k = 1:length(tridLabels.val)
+    trid = tridLabels.val(k);
+    i = find(uniqueTridLabels == trid, 1);
+
+    expected_n = pulseg_ir.virtual_segments(i).n_blocks_in_segment;
+    actual_n = n_blocks_per_trid_label(k);
+
+    assert(actual_n == expected_n, ...
+        'TRID %d has inconsistent segment length at occurrence %d: expected %d blocks, found %d.', ...
+        trid, k, expected_n, actual_n);
 end
 
 
@@ -128,7 +145,8 @@ while n < pulseg_ir.nMax + 1
         if blockDuration(i,j) == -1
             blockDuration(i,j) = b.blockDuration;  % first instance of block (i,j)
         else
-            if b.blockDuration ~= blockDuration(i,j)  % duration is different from a previous instance
+            duration_tol = 1e-12;
+            if abs(b.blockDuration - blockDuration(i,j)) > duration_tol  % duration is different from a previous instance
                 if T(4)
                     isVariableDelay(i,j) = true;
                     n = n + 1;
@@ -180,18 +198,6 @@ for i = 1:n_segments
             end
         end
 
-        %{
-        issame = false;
-        for p = 1:pulseg_ir.n_base_blocks
-            np = pulseg_ir.base_blocks(p).row; 
-            if compareblocks(seq, blockEvents(n,:), blockEvents(np,:), n, np)
-                issame = true;
-                pulseg_ir.virtual_segments(i).base_block_ids(j) = pulseg_ir.base_blocks(p).id;
-                break;
-            end
-        end
-        %}
-
         % If not similar, add as a new base block
         if ~issame
             if arg.verbose
@@ -200,9 +206,11 @@ for i = 1:n_segments
             pulseg_ir.n_base_blocks = pulseg_ir.n_base_blocks + 1;
             pnew = pulseg_ir.n_base_blocks;
             assigned_id = pnew + 1;  % gives 2, 3, 4, ...
-            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).row = n;
-            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).block = normalize_block(b);
-            pulseg_ir.base_blocks(pulseg_ir.n_base_blocks).id = assigned_id;
+            pulseg_ir.base_blocks(pnew).row = n;              % optional metadata
+            pulseg_ir.base_blocks(pnew).block = b0_candidate;
+            pulseg_ir.base_blocks(pnew).id = assigned_id;
+            pulseg_ir.base_blocks(pnew).name = sprintf('base_block_%d', assigned_id);
+
             pulseg_ir.virtual_segments(i).base_block_ids(j) = assigned_id;
         end
     end
@@ -243,9 +251,21 @@ while n < pulseg_ir.nMax + 1
 
     % Step through the blocks contained inside this specific segment instance
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
+
         b = seq.getBlock(n);
 
+        % normalize and verify that the current physical block matches the virtual segment’s base block after normalization
         [b0_instance, scales] = pulseg.normalize_block(b);
+
+        base_id = pulseg_ir.virtual_segments(i).base_block_ids(j);
+
+        if base_id >= 2
+            p = find([pulseg_ir.base_blocks.id] == base_id, 1);
+            assert(~isempty(p), 'Could not find base block ID %d.', base_id);
+
+            assert(pulseg.compare_normalized_blocks(b0_instance, pulseg_ir.base_blocks(p).block), ...
+                'Block %d does not match normalized base block ID %d.', n, base_id);
+        end
 
         % Accumulate per-event parameters as specified in spec.md Section 3.3
         durations(end+1) = b.blockDuration;
@@ -260,27 +280,18 @@ while n < pulseg_ir.nMax + 1
         % Extract RF scales if present
         if ~isempty(b.rf)
             rf_amp(end+1) = scales.rf;
-            rf_phase(end+1) = b.rf.phaseOffset;
-            rf_freq(end+1) = b.rf.freqOffset;
+            rf_phase(end+1) = getfield_default(b.rf, 'phaseOffset', 0);
+            rf_freq(end+1) = getfield_default(b.rf, 'freqOffset', 0);
         end
 
-        % Extract Gradient scaling triplets (Gx, Gy, Gz)
-        has_grad = ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz);
-        if has_grad
-            grad_amp(:, end+1) = scales.grad;
-        end
-
-        % Extract ADC phase offsets
-        if ~isempty(b.adc)
-            adc_phase(end+1) = b.adc.phaseOffset;
-        end
-
-        % Extract rotation matrix
+        % Extract Gradient scaling triplets (Gx, Gy, Gz) and rotation
         has_grad = ~isempty(b.gx) || ~isempty(b.gy) || ~isempty(b.gz);
 
         if has_grad
+            grad_amp(end+1, :) = scales.grad;
+
             if isfield(b, 'rotation') && ~isempty(b.rotation)
-                if strcmp(b.rotation.type, 'rot3D')
+                if isfield(b.rotation, 'type') && strcmp(b.rotation.type, 'rot3D')
                     R(:,:,end+1) = mr.aux.quat.toRotMat(b.rotation.rotQuaternion);
                 else
                     R(:,:,end+1) = eye(3);
@@ -288,6 +299,11 @@ while n < pulseg_ir.nMax + 1
             else
                 R(:,:,end+1) = eye(3);
             end
+        end
+
+        % Extract ADC phase offsets
+        if ~isempty(b.adc)
+            adc_phase(end+1) = getfield_default(b.adc, 'phaseOffset', 0);
         end
 
         n = n + 1;
@@ -312,3 +328,13 @@ textprogressbar('');
 
 %% Set sequence duration
 pulseg_ir.duration = seq.duration;
+
+return
+
+function val = getfield_default(s, fieldname, default)
+    if isfield(s, fieldname) && ~isempty(s.(fieldname))
+        val = s.(fieldname);
+    else
+        val = default;
+    end
+return
