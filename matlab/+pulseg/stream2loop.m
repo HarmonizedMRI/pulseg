@@ -155,3 +155,39 @@ for k = 1:nInstances
 end
 end
 
+
+return
+
+%% Gradient heating related calculations
+
+% Get block/row index corresponding to the beginning of the segment instance
+% instance with the largest combined (all axes) gradient energy.
+
+% initialize max energy field
+for i = 1:n_segments
+    pulseg_ir.virtual_segments(i).Emax.val = 0;
+    pulseg_ir.virtual_segments(i).Emax.n = 1;
+end
+   
+% find segment instance with max energy
+n = 1;
+while n < pulseg_ir.nMax
+    % Calculate total energy in segment instance
+    i = pulseg_ir.loop(n, 1);  % segment index
+    Etmp.gx = 0; Etmp.gy = 0; Etmp.gz = 0;
+    nFirst = n;
+    for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment  
+        Etmp.gx = Etmp.gx + pulseg_ir.loop(n, 11);
+        Etmp.gy = Etmp.gy + pulseg_ir.loop(n, 12);
+        Etmp.gz = Etmp.gz + pulseg_ir.loop(n, 13);
+        n = n + 1;
+    end
+    Etmp.all = Etmp.gx + Etmp.gy + Etmp.gz;
+
+    % update Emax field
+    if Etmp.all > pulseg_ir.virtual_segments(i).Emax.val
+        pulseg_ir.virtual_segments(i).Emax.n = nFirst;
+        pulseg_ir.virtual_segments(i).Emax.val = Etmp.all;
+    end
+end
+
