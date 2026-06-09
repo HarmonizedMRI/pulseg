@@ -116,7 +116,7 @@ single execution in the execution stream.
 | `rf_amplitude` | float[] | required | Scaling factors for RF waveform amplitudes, one per RF event in the virtual segment. Multiply by the normalized base block RF amplitude to recover the physical amplitude. |
 | `rf_phase_offset` | float[] | required | RF phase offsets in radians, one per RF event in the virtual segment. |
 | `rf_frequency_offset` | float[] | required | Frequency offsets in Hz, one per RF and ADC event in the virtual segment. |
-| `gradient_amplitude` | float[3][] | required | Scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. |
+| `gradient_amplitude` | float[3][] | required | Signed scaling factors for gradient amplitudes (Gx, Gy, Gz), one triplet per gradient event in the virtual segment. Negative values indicate polarity inversion relative to the normalized base block. |
 | `adc_phase_offset` | float[] | required | ADC receiver phase offsets in radians, one per ADC event in the virtual segment. |
 | `block_duration` | float[] | required | Pulseq block duration in seconds, one per block in the virtual segment. |
 | `rotation_matrix` | float[3][3][] | optional | 3D spatial rotation matrices applied to the gradient axes, one per gradient event in the virtual segment. Defaults to identity if omitted.|
