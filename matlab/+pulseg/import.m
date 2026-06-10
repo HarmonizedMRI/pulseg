@@ -10,10 +10,10 @@ function pulseg_ir = import(seqarg, varargin)
 % Input options with defaults
 %   verbose               true/FALSE    Print some info to the terminal
 % Output
-%   pulseg_ir        PulSeq sequence struct, see github/HarmonizedMRI/pulseg/docs/spec.md
+%   pulseg_ir        PulSeq IR struct, see github/HarmonizedMRI/pulseg/docs/spec.md
 
 % Definitions:
-% n, row        row index in .seq file
+% row           row index in .seq file
 % i             segment array index, starting from 1
 % j             block number within a segment, starting from 1
 % s             virtual segment index, starting from 1
@@ -46,20 +46,20 @@ blockEvents = cell2mat(seq.blockEvents);
 blockEvents = reshape(blockEvents, [nEvents, length(seq.blockEvents)]).'; 
 
 % number of blocks (rows in .seq file) to step through
-pulseg_ir.n_max = size(blockEvents, 1);
+pulseg_ir.n_blocks = size(blockEvents, 1);
 
 
 %% Get TRID labels and corresponding row indices for all segment instances
 n_trid_labels = 0;
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
 pulseg_ir.n_adc = 0;
-trids = nan(1, pulseg_ir.n_max);
+trids = nan(1, pulseg_ir.n_blocks);
 tridLabels.val = [];
 tridLabels.index = [];
-for n = 1:pulseg_ir.n_max
-    textprogressbar(n/pulseg_ir.n_max*100);
+for row = 1:pulseg_ir.n_blocks
+    textprogressbar(row/pulseg_ir.n_blocks*100);
 
-    b = seq.getBlock(n);
+    b = seq.getBlock(row);
 
     if ~isempty(b.adc)
         pulseg_ir.n_adc = pulseg_ir.n_adc + 1;
@@ -71,8 +71,8 @@ for n = 1:pulseg_ir.n_max
             if strcmp(b.label(ii).label, 'TRID')
                 n_trid_labels = n_trid_labels + 1;
                 tridLabels.val(n_trid_labels) = b.label(ii).value;
-                trids(n) = b.label(ii).value;
-                tridLabels.index(n_trid_labels) = n;
+                trids(row) = b.label(ii).value;
+                tridLabels.index(n_trid_labels) = row;
                 break;
             end
         end
@@ -90,7 +90,7 @@ assert(tridLabels.index(1) == 1, ...
 % Each TRID label is interpreted as the start of a new segment instance.
 % Blocks between consecutive TRID labels belong to the preceding instance.
 [uniqueTridLabels, I] = unique(tridLabels.val);
-n_blocks_per_trid_label = diff([tridLabels.index pulseg_ir.n_max+1]);
+n_blocks_per_trid_label = diff([tridLabels.index pulseg_ir.n_blocks+1]);
 
 n_segments = length(uniqueTridLabels);
 
@@ -131,14 +131,14 @@ for i = 1:n_segments
 end
 isVariableDelay = false(n_segments, max_n_blocks_in_segment);
 blockDuration = -ones(n_segments, max_n_blocks_in_segment); % block instance durations
-n = tridLabels.index(1);  % start of first segment instance
+row = tridLabels.index(1);  % start of first segment instance
 
-while n < pulseg_ir.n_max + 1
-    i = find(uniqueTridLabels == trids(n));  % segment array index
+while row < pulseg_ir.n_blocks + 1
+    i = find(uniqueTridLabels == trids(row));  % segment array index
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
-        b = seq.getBlock(n);
+        b = seq.getBlock(row);
         T = getblocktype(b);
 
         if blockDuration(i,j) == -1
@@ -148,14 +148,14 @@ while n < pulseg_ir.n_max + 1
             if abs(b.blockDuration - blockDuration(i,j)) > duration_tol  % duration is different from a previous instance
                 if T(4)
                     isVariableDelay(i,j) = true;
-                    n = n + 1;
+                    row = row + 1;
                     continue;  % go to next j iteration
                 else
                     error('(row %d: segment %d, block %d) Non-delay blocks must have the same duration in all segment instances', n, i, j);
                 end
             end
         end
-        n = n + 1;
+        row = row + 1;
     end
 end
 
@@ -166,9 +166,9 @@ for i = 1:n_segments
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
-        n = pulseg_ir.virtual_segments(i).rows(j);  % row index in .seq file
+        row = pulseg_ir.virtual_segments(i).rows(j);  % row index in .seq file
 
-        b = seq.getBlock(n);
+        b = seq.getBlock(row);
         T = getblocktype(b);
 
         % Pure delay block identification
@@ -200,12 +200,12 @@ for i = 1:n_segments
         % If not similar, add as a new base block
         if ~issame
             if arg.verbose
-                fprintf('\nFound new base block on line %d\n', n);
+                fprintf('\nFound new base block on line %d\n', row);
             end
             pulseg_ir.n_base_blocks = pulseg_ir.n_base_blocks + 1;
             pnew = pulseg_ir.n_base_blocks;
             assigned_id = pnew + 1;  % gives 2, 3, 4, ...
-            pulseg_ir.base_blocks(pnew).row = n;              % optional metadata
+            pulseg_ir.base_blocks(pnew).row = row;              % optional metadata
             pulseg_ir.base_blocks(pnew).block = b0_candidate;
             pulseg_ir.base_blocks(pnew).id = assigned_id;
             pulseg_ir.base_blocks(pnew).name = sprintf('base_block_%d', assigned_id);
@@ -238,15 +238,15 @@ pulseg_ir.execution_stream = struct(...
 
 % Step through the sequence timeline row by row
 instance_idx = 1;
-n = tridLabels.index(1);
+row = tridLabels.index(1);
 
 textprogressbar('import(): Getting dynamic scan information: ');
 
-while n < pulseg_ir.n_max + 1
+while row < pulseg_ir.n_blocks + 1
 
-    textprogressbar(n/pulseg_ir.n_max*100);
+    textprogressbar(row/pulseg_ir.n_blocks*100);
 
-    i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
+    i = find(uniqueTridLabels == trids(row)); % Segment definition lookup
 
     % Initialize instance collector arrays
     rf_amp = [];
@@ -266,7 +266,7 @@ while n < pulseg_ir.n_max + 1
     % Step through the blocks contained inside this specific segment instance
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
 
-        b = seq.getBlock(n);
+        b = seq.getBlock(row);
 
         % normalize and verify that the current physical block matches the virtual segment’s base block after normalization
         [b0_instance, scales] = pulseg.normalize_block(b);
@@ -278,7 +278,7 @@ while n < pulseg_ir.n_max + 1
             assert(~isempty(p), 'Could not find base block ID %d.', base_id);
 
             assert(pulseg.compare_normalized_blocks(b0_instance, pulseg_ir.base_blocks(p).block), ...
-                'Block %d does not match normalized base block ID %d.', n, base_id);
+                'Block %d does not match normalized base block ID %d.', row, base_id);
         end
 
         % Accumulate per-event parameters as specified in spec.md Section 3.3
@@ -321,11 +321,11 @@ while n < pulseg_ir.n_max + 1
             adc_freq(end+1) = getfield_default(b.adc, 'freqOffset', 0);
         end
 
-        n = n + 1;
+        row = row + 1;
     end
 
     % Populate the finalized instance structure
-    pulseg_ir.execution_stream(instance_idx).virtual_segment_id = i;
+    pulseg_ir.execution_stream(instance_idx).virtual_segment_id = pulseg_ir.virtual_segments(i).id;
     pulseg_ir.execution_stream(instance_idx).rf_amplitude = rf_amp;
     pulseg_ir.execution_stream(instance_idx).rf_phase_offset = rf_phase;
     pulseg_ir.execution_stream(instance_idx).rf_frequency_offset = rf_freq;
