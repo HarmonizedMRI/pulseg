@@ -45,7 +45,7 @@ function testPulsegImportDemoSequence(testCase)
 
     % Create and write demo Pulseq sequence.
     addpath ../demo/
-    create_pulseg_import_demo_sequence(seqFile);
+    create_demo_sequence(seqFile);
 
     testCase.verifyTrue(isfile(seqFile), 'Demo .seq file was not created.');
 
@@ -162,50 +162,6 @@ function testPulsegImportDemoSequence(testCase)
 end
 
 
-function label = make_trid_label(trid)
-% MAKE_TRID_LABEL Create a Pulseq TRID label event.
-
-    label = mr.makeLabel('SET', 'TRID', trid);
-end
-
-
-function rf2 = scale_rf_event(rf, scale)
-% SCALE_RF_EVENT Scale an RF event's signal while preserving shape metadata.
-
-    rf2 = rf;
-
-    if isfield(rf2, 'signal') && ~isempty(rf2.signal)
-        rf2.signal = scale * rf2.signal;
-    end
-end
-
-
-function g2 = scale_gradient_event(g, scale)
-% SCALE_GRADIENT_EVENT Scale a Pulseq gradient event by a scalar factor.
-%
-% This local helper avoids relying on mr.scaleGrad so that the test is less
-% sensitive to Pulseq toolbox version differences.
-
-    g2 = g;
-
-    fields_to_scale = { ...
-        'amplitude', ...
-        'area', ...
-        'flatArea', ...
-        'waveform', ...
-        'first', ...
-        'last'};
-
-    for k = 1:numel(fields_to_scale)
-        fname = fields_to_scale{k};
-
-        if isfield(g2, fname) && ~isempty(g2.(fname))
-            g2.(fname) = scale * g2.(fname);
-        end
-    end
-end
-
-
 function vs = get_virtual_segment_by_trid(pulseg_ir, trid)
 % GET_VIRTUAL_SEGMENT_BY_TRID Return virtual segment with matching TRID metadata.
 %
@@ -227,9 +183,13 @@ function vs = get_virtual_segment_by_trid(pulseg_ir, trid)
     error('Could not find virtual segment with TRID %d.', trid);
 end
 
-
 function grad_amp = collect_gradient_amplitudes(pulseg_ir)
-% COLLECT_GRADIENT_AMPLITUDES Concatenate gradient amplitudes from execution stream.
+% COLLECT_GRADIENT_AMPLITUDES Concatenate all gradient amplitudes from execution stream.
+%
+% Output:
+%   grad_amp
+%       Column vector containing all gradient scale factors from all segment
+%       instances.
 
     grad_amp = [];
 
@@ -237,8 +197,7 @@ function grad_amp = collect_gradient_amplitudes(pulseg_ir)
         gk = pulseg_ir.execution_stream(k).gradient_amplitude;
 
         if ~isempty(gk)
-            % Accept either 3 x N or N x 3 layout.
-            grad_amp = [grad_amp; gk(:).']; %#ok<AGROW>
+            grad_amp = [grad_amp; gk(:)]; %#ok<AGROW>
         end
     end
 end
