@@ -46,18 +46,18 @@ blockEvents = cell2mat(seq.blockEvents);
 blockEvents = reshape(blockEvents, [nEvents, length(seq.blockEvents)]).'; 
 
 % number of blocks (rows in .seq file) to step through
-pulseg_ir.nMax = size(blockEvents, 1);
+pulseg_ir.n_max = size(blockEvents, 1);
 
 
 %% Get TRID labels and corresponding row indices for all segment instances
 n_trid_labels = 0;
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
 pulseg_ir.n_adc = 0;
-trids = nan(1, pulseg_ir.nMax);
+trids = nan(1, pulseg_ir.n_max);
 tridLabels.val = [];
 tridLabels.index = [];
-for n = 1:pulseg_ir.nMax
-    textprogressbar(n/pulseg_ir.nMax*100);
+for n = 1:pulseg_ir.n_max
+    textprogressbar(n/pulseg_ir.n_max*100);
 
     b = seq.getBlock(n);
 
@@ -87,8 +87,10 @@ assert(tridLabels.index(1) == 1, ...
     'First block must contain a TRID label. Unlabeled preamble blocks are not currently supported.');
 
 %% Initialize virtual segments
+% Each TRID label is interpreted as the start of a new segment instance.
+% Blocks between consecutive TRID labels belong to the preceding instance.
 [uniqueTridLabels, I] = unique(tridLabels.val);
-n_blocks_per_trid_label = diff([tridLabels.index pulseg_ir.nMax+1]);
+n_blocks_per_trid_label = diff([tridLabels.index pulseg_ir.n_max+1]);
 
 n_segments = length(uniqueTridLabels);
 
@@ -131,7 +133,7 @@ isVariableDelay = false(n_segments, max_n_blocks_in_segment);
 blockDuration = -ones(n_segments, max_n_blocks_in_segment); % block instance durations
 n = tridLabels.index(1);  % start of first segment instance
 
-while n < pulseg_ir.nMax + 1
+while n < pulseg_ir.n_max + 1
     i = find(uniqueTridLabels == trids(n));  % segment array index
 
     for j = 1:pulseg_ir.virtual_segments(i).n_blocks_in_segment
@@ -234,14 +236,16 @@ pulseg_ir.execution_stream = struct(...
     'physio_trigger', cell(1, nInstances) ...
 );
 
-% While stepping through the sequence timeline row by row:
+% Step through the sequence timeline row by row
 instance_idx = 1;
 n = tridLabels.index(1);
 
 textprogressbar('import(): Getting dynamic scan information: ');
 
-while n < pulseg_ir.nMax + 1
-    textprogressbar(n/pulseg_ir.nMax*100);
+while n < pulseg_ir.n_max + 1
+
+    textprogressbar(n/pulseg_ir.n_max*100);
+
     i = find(uniqueTridLabels == trids(n)); % Segment definition lookup
 
     % Initialize instance collector arrays
@@ -336,7 +340,6 @@ while n < pulseg_ir.nMax + 1
 end
 textprogressbar(100);
 textprogressbar('');
-
 
 %% Set sequence duration
 pulseg_ir.duration = seq.duration;
