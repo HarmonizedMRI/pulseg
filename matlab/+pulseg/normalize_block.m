@@ -17,8 +17,18 @@ function [b0, scales] = normalize_block(b)
 %   gradient waveforms normalize to the same canonical base-block shape and
 %   differ only by the sign of the corresponding entry in scales.grad.
 %
-%   This behavior is useful for PulSeg because positive and negative
-%   instances of the same gradient shape can share one BaseBlock.
+%   In addition to the primary gradient waveform or amplitude field,
+%   amplitude-like gradient metadata fields are normalized by the same signed
+%   scale factor when present:
+%
+%       first
+%       last
+%       area
+%       flatArea
+%
+%   This is important because recent Pulseq versions use first/last to store
+%   gradient values at raster edges, and trapezoid events may carry area and
+%   flatArea fields.
 %
 % Inputs:
 %   b
@@ -27,7 +37,8 @@ function [b0, scales] = normalize_block(b)
 % Outputs:
 %   b0
 %       Normalized copy of b. RF and gradient amplitudes are normalized.
-%       ADC events and other non-amplitude metadata are copied unchanged.
+%       ADC events and other non-amplitude metadata are copied unchanged,
+%       except dynamic RF/ADC phase and frequency offsets are zeroed.
 %
 %   scales
 %       Struct containing removed amplitude scale factors:
@@ -46,7 +57,9 @@ function [b0, scales] = normalize_block(b)
 %   - RF normalization uses magnitude and therefore does not absorb RF phase.
 %   - Gradient normalization uses signed scaling so that globally inverted
 %     gradient waveforms share the same normalized shape.
-%   - ADC events are not normalized.
+%   - RF/ADC phase and frequency offsets are zeroed in b0 because these are
+%     represented in SegmentInstance fields in PulSeg 2.0.
+%   - ADC events are otherwise not normalized.
 %   - This function does not check hardware limits or slew constraints.
 
 b0 = b;
@@ -55,6 +68,7 @@ scales.rf = [];
 scales.grad = [0 0 0];
 
 %% RF
+
 if isfield(b, 'rf') && ~isempty(b.rf)
     s = max(abs(b.rf.signal(:)));
     scales.rf = s;
@@ -62,17 +76,30 @@ if isfield(b, 'rf') && ~isempty(b.rf)
     if s > 0
         b0.rf.signal = b.rf.signal / s;
     end
-    if isfield(b0.rf, 'phaseOffset'), b0.rf.phaseOffset = 0; end
-    if isfield(b0.rf, 'freqOffset'),  b0.rf.freqOffset  = 0; end
+
+    % Dynamic RF offsets belong in SegmentInstance, not BaseBlock.
+    if isfield(b0.rf, 'phaseOffset')
+        b0.rf.phaseOffset = 0;
+    end
+    if isfield(b0.rf, 'freqOffset')
+        b0.rf.freqOffset = 0;
+    end
 end
 
 %% ADC
+
 if isfield(b0, 'adc') && ~isempty(b0.adc)
-    if isfield(b0.adc, 'phaseOffset'), b0.adc.phaseOffset = 0; end
-    if isfield(b0.adc, 'freqOffset'),  b0.adc.freqOffset  = 0; end
+    % Dynamic ADC offsets belong in SegmentInstance, not BaseBlock.
+    if isfield(b0.adc, 'phaseOffset')
+        b0.adc.phaseOffset = 0;
+    end
+    if isfield(b0.adc, 'freqOffset')
+        b0.adc.freqOffset = 0;
+    end
 end
 
 %% Gradients
+
 grad_fields = {'gx', 'gy', 'gz'};
 
 for a = 1:3
@@ -80,6 +107,8 @@ for a = 1:3
 
     if isfield(b, gname) && ~isempty(b.(gname))
         g = b.(gname);
+
+        s = 0;
 
         if isfield(g, 'waveform') && ~isempty(g.waveform)
             % Use signed value at the peak absolute magnitude.
@@ -89,6 +118,7 @@ for a = 1:3
             if peak_abs > 0
                 s = g.waveform(idx);      % signed scale
                 scales.grad(a) = s;
+
                 b0.(gname).waveform = g.waveform / s;
             else
                 scales.grad(a) = 0;
@@ -105,6 +135,36 @@ for a = 1:3
             else
                 scales.grad(a) = 0;
             end
+        end
+
+        % Normalize amplitude-like gradient metadata using the same signed
+        % scale factor. This keeps sign-flipped gradients structurally
+        % identical after normalization.
+        if s ~= 0
+            b0.(gname) = normalize_gradient_amplitude_like_fields(b0.(gname), g, s);
+        end
+    end
+end
+end
+
+
+function g0 = normalize_gradient_amplitude_like_fields(g0, g, s)
+% NORMALIZE_GRADIENT_AMPLITUDE_LIKE_FIELDS Normalize dependent gradient fields.
+%
+% These fields scale linearly with gradient amplitude and therefore should
+% be divided by the same signed scale used for waveform/amplitude.
+
+    fields_to_normalize = { ...
+        'first', ...
+        'last', ...
+        'area', ...
+        'flatArea'};
+
+    for k = 1:numel(fields_to_normalize)
+        fname = fields_to_normalize{k};
+
+        if isfield(g, fname) && ~isempty(g.(fname))
+            g0.(fname) = g.(fname) / s;
         end
     end
 end
