@@ -2,7 +2,7 @@
 
 # PulSeg Intermediate Representation Specification
 
-**Version:** 2.0  
+**Version:** 2.0-alpha  
 **Date:** 2026-mm-dd  
 **Status:** Initial Release  
 **Authors:** [Author names]  
@@ -135,7 +135,7 @@ A complete PulSeg representation consists of the following top-level fields:
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `pulseg_version` | string | required | Version of this specification. Must be `"2.0"` for representations compliant with this document. |
+| `pulseg_version` | string | required | Version of this specification. Must be `"2.0-alpha"` for representations compliant with this document. |
 | `base_blocks` | BaseBlock[] | required | List of all base blocks. Must be non-empty. IDs must be unique. |
 | `virtual_segments` | VirtualSegment[] | required | List of all virtual segments. Must be non-empty. IDs must be unique. |
 | `execution_stream` | SegmentInstance[] | required | Ordered list of segment instances defining the complete scan execution. Must be non-empty. |
@@ -199,7 +199,7 @@ between base blocks, virtual segments, and segment instances in the execution st
 
 ## 6. Versioning and Changelog
 
-**Current version:** 2.0
+**Current version:** 2.0-alpha
 
 Any change to this specification that affects data structure definitions, field names, 
 field types, required/optional status, or normalization rules must:
@@ -213,7 +213,7 @@ field types, required/optional status, or normalization rules must:
 | Version | Date | Description |
 |---|---|---|
 | 1.0 | 2025-02-20 | Initial release |
-| 2.0 | 2026-mm-dd | Class definition structural upgrade; minor naming standard alignment to PyPulseq variable guide |
+| 2.0-alpha | 2026-mm-dd | Class definition structural upgrade; minor naming standard alignment to PyPulseq variable guide |
 
 ---
 
