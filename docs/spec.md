@@ -22,7 +22,7 @@ This document defines the PulSeg data structures, terminology, and conversion re
 It is intended for developers of sequence conversion tools, scanner interpreters, and 
 simulation frameworks.
 
-This specification is stable at version 1.0. Any change affecting data structure definitions, 
+This specification is stable at version 2.0-alpha. Any change affecting data structure definitions, 
 field semantics, or required fields must increment the version number and include 
 migration notes in the changelog (see Section 7).
 
@@ -213,7 +213,7 @@ field types, required/optional status, or normalization rules must:
 | Version | Date | Description |
 |---|---|---|
 | 1.0 | 2025-02-20 | Initial release |
-| 2.0-alpha | 2026-mm-dd | Class definition structural upgrade; minor naming standard alignment to PyPulseq variable guide |
+| 2.0-alpha | 2026-06-11 | Class definition structural upgrade; minor naming standard alignment to PyPulseq variable guide |
 
 ---
 
