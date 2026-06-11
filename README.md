@@ -15,7 +15,7 @@
 This abstraction enables translation of Pulseq sequences to certain hardware platforms such as GE.
 
 *Project status:
-Version 1.0 of the intermediate representation specification is now formalized – see [`docs/spec.md`](docs/spec.md).*
+Version 2.0-alpha of the intermediate representation specification is now formalized – see [`docs/spec.md`](docs/spec.md).*
 
 ---
 
@@ -70,7 +70,7 @@ Automatically detecting and assigning segment instances is an **unmet need**.
 
 ## Documentation
 
-- [Intermediate Representation Specification (v1.0)](docs/spec.md)
+- [Intermediate Representation Specification (v2.0-alpha)](docs/spec.md)
 - [Install instructions](docs/install.md)
 - [Changelog](docs/changelog.md)
 
