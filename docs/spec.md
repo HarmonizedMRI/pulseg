@@ -5,7 +5,7 @@
 **Version:** 2.0-alpha  
 **Date:** 2026-06-11  
 **Status:** Initial Release  
-**Authors:** Jon-Fredrik Nielsen
+**Authors:** Jon-Fredrik Nielsen  
 **Repository:** https://github.com/HarmonizedMRI/pulseg
 
 ---
