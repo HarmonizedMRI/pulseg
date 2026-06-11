@@ -3,9 +3,9 @@
 # PulSeg Intermediate Representation Specification
 
 **Version:** 2.0-alpha  
-**Date:** 2026-mm-dd  
+**Date:** 2026-06-11  
 **Status:** Initial Release  
-**Authors:** [Author names]  
+**Authors:** Jon-Fredrik Nielsen
 **Repository:** https://github.com/HarmonizedMRI/pulseg
 
 ---
@@ -232,5 +232,5 @@ For questions, bug reports, or change requests, please open a GitHub issue:
 https://github.com/HarmonizedMRI/pulseg/issues
 
 For correspondence regarding this specification:  
-*[your-address@your-domain.edu]*
+*jfnielsen@gmail.com*
 
