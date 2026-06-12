@@ -1,16 +1,16 @@
 function validate_ir(pulseg_ir)
-% VALIDATE_IR Validate a PulSeg 2.0 intermediate representation struct.
+% VALIDATE_IR Validate a PulSeg 2.0-alpha intermediate representation struct.
 %
 % Syntax:
 %   pulseg.validate_ir(pulseg_ir)
 %
 % Description:
 %   VALIDATE_IR performs structural and consistency checks on a PulSeg IR
-%   struct according to the PulSeg 2.0 specification. It verifies required
+%   struct according to the PulSeg 2.0-alpha specification. It verifies required
 %   top-level fields, base block IDs, virtual segment references, execution
 %   stream references, and per-instance array lengths.
 %
-%   This validator assumes the PulSeg 2.0 spec explicitly requires both:
+%   This validator assumes the PulSeg 2.0-alpha spec explicitly requires both:
 %
 %       rf_frequency_offset
 %       adc_frequency_offset
@@ -35,8 +35,8 @@ function validate_ir(pulseg_ir)
     assert(ischar(pulseg_ir.pulseg_version) || isstring(pulseg_ir.pulseg_version), ...
         'pulseg_version must be a string.');
 
-    assert(strcmp(char(pulseg_ir.pulseg_version), '2.0'), ...
-        'pulseg_version must be ''2.0''. Found ''%s''.', char(pulseg_ir.pulseg_version));
+    assert(strcmp(char(pulseg_ir.pulseg_version), '2.0-alpha'), ...
+        'pulseg_version must be ''2.0-alpha''. Found ''%s''.', char(pulseg_ir.pulseg_version));
 
     assert(~isempty(pulseg_ir.base_blocks), ...
         'base_blocks must be non-empty for PulSeg 2.0.');
