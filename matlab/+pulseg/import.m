@@ -20,7 +20,7 @@ function pulseg_ir = import(seqarg, varargin)
 
 import pulseg.*
 
-pulseg_ir.pulseg_version = '2.0';
+pulseg_ir.pulseg_version = '2.0-alpha';
 
 pulseg_ir.creation_date = char(datetime('today', 'Format', 'yyyy-MM-dd'));
 
@@ -344,7 +344,7 @@ textprogressbar('');
 %% Set sequence duration
 pulseg_ir.duration = seq.duration;
 
-%% Validate the structure against the PulSeg 2.0 specification
+%% Validate the structure against the PulSeg 2.0-alpha specification
 pulseg.validate_ir(pulseg_ir);
 
 return
