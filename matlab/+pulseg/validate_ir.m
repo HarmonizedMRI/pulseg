@@ -525,7 +525,7 @@ function check_gradient_event(g, event_name)
     assert(has_waveform || has_amplitude, ...
         '%s must contain either waveform or amplitude.', event_name);
 
-    % Arbitrary/sampled gradient.
+     % Arbitrary/sampled gradient.
     if has_waveform
         assert(isnumeric(g.waveform) && isvector(g.waveform), ...
             '%s.waveform must be a numeric vector.', event_name);
@@ -537,19 +537,34 @@ function check_gradient_event(g, event_name)
         require_numeric_scalar_field(g, 'first', event_name);
         require_numeric_scalar_field(g, 'last', event_name);
 
-        % Optional arbitrary-gradient timing vector, if present.
-        if isfield(g, 'tt') && ~isempty(g.tt)
-            assert(isnumeric(g.tt) && isvector(g.tt), ...
-                '%s.tt must be a numeric vector if present.', event_name);
-            assert(all(isfinite(g.tt(:))) && all(g.tt(:) >= 0), ...
-                '%s.tt must contain finite, non-negative values.', event_name);
-        end
+        % Arbitrary gradients must include sample times.
+        require_field(g, 'tt', event_name);
 
+        assert(isnumeric(g.tt) && isvector(g.tt) && ~isempty(g.tt), ...
+            '%s.tt must be a non-empty numeric vector for arbitrary gradients.', event_name);
+
+        assert(all(isfinite(g.tt(:))) && all(g.tt(:) >= 0), ...
+            '%s.tt must contain finite, non-negative values.', event_name);
+
+        assert(numel(g.tt) == numel(g.waveform), ...
+            '%s.tt must have the same number of samples as %s.waveform. Found %d and %d.', ...
+            event_name, event_name, numel(g.tt), numel(g.waveform));
+
+        tt = g.tt(:);
+        assert(all(diff(tt) >= 0), ...
+            '%s.tt must be monotonically nondecreasing.', event_name);
+
+        % Optional alias/time-vector field, if present.
         if isfield(g, 't') && ~isempty(g.t)
             assert(isnumeric(g.t) && isvector(g.t), ...
                 '%s.t must be a numeric vector if present.', event_name);
+
             assert(all(isfinite(g.t(:))) && all(g.t(:) >= 0), ...
                 '%s.t must contain finite, non-negative values.', event_name);
+
+            assert(numel(g.t) == numel(g.waveform), ...
+                '%s.t must have the same number of samples as %s.waveform if present. Found %d and %d.', ...
+                event_name, event_name, numel(g.t), numel(g.waveform));
         end
     end
 
