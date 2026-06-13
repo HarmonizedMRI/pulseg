@@ -467,6 +467,10 @@ function check_rf_event(rf, event_name)
 
     require_field(rf, 'signal', event_name);
     require_field(rf, 't', event_name);
+    require_numeric_scalar_field(rf, 'center', event_name);
+
+    assert(rf.center >= 0, ...
+        '%s.center must be non-negative.', event_name);
 
     assert(isnumeric(rf.signal) && ~isempty(rf.signal), ...
         '%s.signal must be a non-empty numeric array.', event_name);
