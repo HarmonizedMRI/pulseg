@@ -56,7 +56,7 @@ function testPulsegImportDemoSequence(testCase)
 
     testCase.verifyTrue(isstruct(pulseg_ir));
     testCase.verifyTrue(isfield(pulseg_ir, 'pulseg_version'));
-    testCase.verifyEqual(pulseg_ir.pulseg_version, '2.0');
+    testCase.verifyEqual(pulseg_ir.pulseg_version, '2.0-alpha');
 
     testCase.verifyTrue(isfield(pulseg_ir, 'base_blocks'));
     testCase.verifyTrue(isfield(pulseg_ir, 'virtual_segments'));
