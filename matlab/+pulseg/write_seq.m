@@ -42,6 +42,14 @@ if arg.strict
     pulseg.validate_ir(pulseg_ir);
 end
 
+% Hydrate base blocks for MATLAB Pulseq writer compatibility.
+[pulseg_ir, report] = pulseg.check_base_blocks( ...
+    pulseg_ir, ...
+    'hydrate', true, ...
+    'require_normalized', true, ...
+    'strip_metadata_extensions', true, ...
+    'error_on_fail', true);
+
 if nargin < 2 || isempty(seqfile)
     error('An output .seq filename must be provided.');
 end
@@ -208,6 +216,7 @@ if arg.verbose
     fprintf('Writing Pulseq file: %s\n', seqfile);
 end
 
+debug_internal_block_duration_raster(seq);
 seq.write(char(seqfile));
 
 if arg.verbose
@@ -385,6 +394,132 @@ if isfield(s, fieldname) && ~isempty(s.(fieldname))
     val = s.(fieldname);
 else
     val = default;
+end
+
+return
+
+
+function print_block_event_summary(b)
+
+event_fields = {'rf', 'gx', 'gy', 'gz', 'adc', 'delay', 'trig', 'label', 'rotation'};
+
+fprintf(2, '  Event summary:\n');
+
+for ii = 1:numel(event_fields)
+    f = event_fields{ii};
+
+    if isfield(b, f) && ~isempty(b.(f))
+        ev = b.(f);
+
+        fprintf(2, '    %s present\n', f);
+
+        if isstruct(ev)
+            if isfield(ev, 'type') && ~isempty(ev.type)
+                fprintf(2, '      type: %s\n', char(ev.type));
+            end
+
+            if isfield(ev, 'channel') && ~isempty(ev.channel)
+                fprintf(2, '      channel: %s\n', char(ev.channel));
+            end
+
+            scalar_fields = { ...
+                'delay', ...
+                'duration', ...
+                'riseTime', ...
+                'flatTime', ...
+                'fallTime', ...
+                'numSamples', ...
+                'dwell', ...
+                'deadTime', ...
+                'ringdownTime', ...
+                'phaseOffset', ...
+                'freqOffset', ...
+                'center', ...
+                'amplitude', ...
+                'area', ...
+                'flatArea', ...
+                'first', ...
+                'last'};
+
+            for jj = 1:numel(scalar_fields)
+                sf = scalar_fields{jj};
+
+                if isfield(ev, sf) && isnumeric(ev.(sf)) && isscalar(ev.(sf))
+                    fprintf(2, '      %s: %.15g\n', sf, ev.(sf));
+                end
+            end
+
+            if isfield(ev, 'signal') && ~isempty(ev.signal)
+                fprintf(2, '      signal size: %s\n', mat2str(size(ev.signal)));
+            end
+
+            if isfield(ev, 't') && ~isempty(ev.t)
+                fprintf(2, '      t samples: %d, t(end): %.15g\n', ...
+                    numel(ev.t), ev.t(end));
+            end
+
+            if isfield(ev, 'waveform') && ~isempty(ev.waveform)
+                fprintf(2, '      waveform samples: %d\n', numel(ev.waveform));
+            end
+
+            if isfield(ev, 'tt') && ~isempty(ev.tt)
+                fprintf(2, '      tt samples: %d, tt(end): %.15g\n', ...
+                    numel(ev.tt), ev.tt(end));
+            end
+
+            if isfield(ev, 'phaseModulation') && ~isempty(ev.phaseModulation)
+                fprintf(2, '      phaseModulation samples: %d\n', ...
+                    numel(ev.phaseModulation));
+            elseif isfield(ev, 'phaseModulation')
+                fprintf(2, '      phaseModulation: []\n');
+            end
+        end
+    end
+end
+
+return
+
+
+function debug_internal_block_duration_raster(seq)
+% DEBUG_INTERNAL_BLOCK_DURATION_RASTER Reproduce the duration assertion in mr.Sequence.write.
+
+fprintf('Checking internal Pulseq blockDurations raster alignment...\n');
+
+raster = seq.blockDurationRaster;
+fprintf('seq.blockDurationRaster = %.15g s\n', raster);
+
+n_bad = 0;
+
+for i = 1:length(seq.blockEvents)
+
+    bd = seq.blockDurations(i) / raster;
+    bdr = round(bd);
+
+    if abs(bdr - bd) >= 1e-6
+        n_bad = n_bad + 1;
+
+        fprintf(2, '\nInternal block duration raster mismatch at block %d\n', i);
+        fprintf(2, '  seq.blockDurations(%d) = %.15g s\n', i, seq.blockDurations(i));
+        fprintf(2, '  raster                  = %.15g s\n', raster);
+        fprintf(2, '  duration/raster         = %.15g\n', bd);
+        fprintf(2, '  rounded ticks           = %.15g\n', bdr);
+        fprintf(2, '  tick error              = %.15g\n', bdr - bd);
+        fprintf(2, '  duration error          = %.15g s\n', (bdr - bd) * raster);
+
+        try
+            b = seq.getBlock(i);
+            print_block_event_summary(b);
+        catch ME
+            fprintf(2, '  Could not get block summary: %s\n', ME.message);
+        end
+    end
+end
+
+if n_bad == 0
+    fprintf('All internal blockDurations are raster-aligned.\n');
+else
+
+    error('Found %d internal blockDuration raster mismatch(es).', n_bad);
 end
 
 return
