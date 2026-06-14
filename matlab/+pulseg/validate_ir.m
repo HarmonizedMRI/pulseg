@@ -75,8 +75,12 @@ function validate_ir(pulseg_ir)
 
         base_ids(p) = id;
 
-        check_pulseq_block(pulseg_ir.base_blocks(p).block, sprintf('%s.block', bb_name));
-        check_base_block_normalization(pulseg_ir.base_blocks(p).block, bb_name);
+        pulseg.check_pulseq_block( ...
+            pulseg_ir.base_blocks(p).block, ...
+            sprintf('%s.block', bb_name), ...
+            'hydrate', false, ...
+            'require_normalized', true, ...
+            'error_on_fail', true);
     end
 
     assert(numel(unique(base_ids)) == numel(base_ids), ...
@@ -411,217 +415,6 @@ function check_base_block_normalization(b, bb_name)
 end
 
 
-function check_pulseq_block(b, block_name)
-% CHECK_PULSEQ_BLOCK Validate that a BaseBlock.block has Pulseq-like structure.
-%
-% This is a structural validation, not a full Pulseq timing/safety check.
-% It verifies that present events contain the minimum fields expected by
-% pulseg.import(), stream2loop(), and downstream interpreters.
-
-    assert(isstruct(b), ...
-        '%s must be a struct containing Pulseq block fields.', block_name);
-
-    % A Pulseq block should carry its duration.
-    require_numeric_scalar_field(b, 'blockDuration', block_name);
-    assert(b.blockDuration >= 0, ...
-        '%s.blockDuration must be non-negative.', block_name);
-
-    % RF event, if present.
-    if has_event(b, 'rf')
-        check_rf_event(b.rf, sprintf('%s.rf', block_name));
-    end
-
-    % Gradient events, if present.
-    grad_fields = {'gx', 'gy', 'gz'};
-
-    for a = 1:numel(grad_fields)
-        gname = grad_fields{a};
-
-        if has_event(b, gname)
-            check_gradient_event(b.(gname), sprintf('%s.%s', block_name, gname));
-        end
-    end
-
-    % ADC event, if present.
-    if has_event(b, 'adc')
-        check_adc_event(b.adc, sprintf('%s.adc', block_name));
-    end
-
-    % Optional trigger event.
-    if has_event(b, 'trig')
-        check_trigger_event(b.trig, sprintf('%s.trig', block_name));
-    end
-
-    % Optional rotation event.
-    if has_event(b, 'rotation')
-        check_rotation_event(b.rotation, sprintf('%s.rotation', block_name));
-    end
-end
-
-
-function check_rf_event(rf, event_name)
-% CHECK_RF_EVENT Validate required fields for a Pulseq RF event.
-
-    assert(isstruct(rf), ...
-        '%s must be a struct.', event_name);
-
-    require_field(rf, 'signal', event_name);
-    require_field(rf, 't', event_name);
-    require_numeric_scalar_field(rf, 'center', event_name);
-
-    assert(rf.center >= 0, ...
-        '%s.center must be non-negative.', event_name);
-
-    assert(isnumeric(rf.signal) && ~isempty(rf.signal), ...
-        '%s.signal must be a non-empty numeric array.', event_name);
-
-    assert(isnumeric(rf.t) && isvector(rf.t) && ~isempty(rf.t), ...
-        '%s.t must be a non-empty numeric vector.', event_name);
-
-    assert(all(isfinite(rf.signal(:))), ...
-        '%s.signal contains non-finite values.', event_name);
-
-    assert(all(isfinite(rf.t(:))) && all(rf.t(:) >= 0), ...
-        '%s.t must contain finite, non-negative values.', event_name);
-
-    % For single-channel RF, numel(t) usually equals numel(signal).
-    % For pTx/multichannel RF, one dimension of signal should match numel(t).
-    n_t = numel(rf.t);
-    sig_size = size(rf.signal);
-
-    assert(numel(rf.signal) == n_t || any(sig_size == n_t), ...
-        ['%s.t length is not compatible with %s.signal size. ', ...
-         'Expected numel(t) to match numel(signal) or one signal dimension.'], ...
-        event_name, event_name);
-
-    % Optional but common Pulseq RF scalar fields.
-    check_optional_numeric_scalar_field(rf, 'delay', event_name, true);
-    check_optional_numeric_scalar_field(rf, 'phaseOffset', event_name, false);
-    check_optional_numeric_scalar_field(rf, 'freqOffset', event_name, false);
-    check_optional_numeric_scalar_field(rf, 'deadTime', event_name, true);
-    check_optional_numeric_scalar_field(rf, 'ringdownTime', event_name, true);
-
-    % If use is present, it should be textual.
-    if isfield(rf, 'use') && ~isempty(rf.use)
-        assert(ischar(rf.use) || isstring(rf.use), ...
-            '%s.use must be a string if present.', event_name);
-    end
-end
-
-
-function check_gradient_event(g, event_name)
-% CHECK_GRADIENT_EVENT Validate required fields for a Pulseq gradient event.
-%
-% Supports trapezoid/scalar-style gradients and arbitrary/sampled gradients.
-
-    assert(isstruct(g), ...
-        '%s must be a struct.', event_name);
-
-    % Pulseq gradient events usually have a type field.
-    if isfield(g, 'type') && ~isempty(g.type)
-        assert(ischar(g.type) || isstring(g.type), ...
-            '%s.type must be a string if present.', event_name);
-    end
-
-    has_waveform = isfield(g, 'waveform') && ~isempty(g.waveform);
-    has_amplitude = isfield(g, 'amplitude') && ~isempty(g.amplitude);
-
-    assert(has_waveform || has_amplitude, ...
-        '%s must contain either waveform or amplitude.', event_name);
-
-     % Arbitrary/sampled gradient.
-    if has_waveform
-        assert(isnumeric(g.waveform) && isvector(g.waveform), ...
-            '%s.waveform must be a numeric vector.', event_name);
-
-        assert(all(isfinite(g.waveform(:))), ...
-            '%s.waveform contains non-finite values.', event_name);
-
-        % Recent Pulseq versions require first/last values at raster edges.
-        require_numeric_scalar_field(g, 'first', event_name);
-        require_numeric_scalar_field(g, 'last', event_name);
-
-        % Arbitrary gradients must include sample times.
-        require_field(g, 'tt', event_name);
-
-        assert(isnumeric(g.tt) && isvector(g.tt) && ~isempty(g.tt), ...
-            '%s.tt must be a non-empty numeric vector for arbitrary gradients.', event_name);
-
-        assert(all(isfinite(g.tt(:))) && all(g.tt(:) >= 0), ...
-            '%s.tt must contain finite, non-negative values.', event_name);
-
-        assert(numel(g.tt) == numel(g.waveform), ...
-            '%s.tt must have the same number of samples as %s.waveform. Found %d and %d.', ...
-            event_name, event_name, numel(g.tt), numel(g.waveform));
-
-        tt = g.tt(:);
-        assert(all(diff(tt) >= 0), ...
-            '%s.tt must be monotonically nondecreasing.', event_name);
-
-        % Optional alias/time-vector field, if present.
-        if isfield(g, 't') && ~isempty(g.t)
-            assert(isnumeric(g.t) && isvector(g.t), ...
-                '%s.t must be a numeric vector if present.', event_name);
-
-            assert(all(isfinite(g.t(:))) && all(g.t(:) >= 0), ...
-                '%s.t must contain finite, non-negative values.', event_name);
-
-            assert(numel(g.t) == numel(g.waveform), ...
-                '%s.t must have the same number of samples as %s.waveform if present. Found %d and %d.', ...
-                event_name, event_name, numel(g.t), numel(g.waveform));
-        end
-    end
-
-    % Trapezoid/scalar gradient.
-    if has_amplitude
-        assert(isnumeric(g.amplitude) && isscalar(g.amplitude) && isfinite(g.amplitude), ...
-            '%s.amplitude must be a finite numeric scalar.', event_name);
-
-        % If this is a trap event, these timing fields should be present.
-        if isfield(g, 'type') && strcmp(char(g.type), 'trap')
-            require_numeric_scalar_field(g, 'riseTime', event_name);
-            require_numeric_scalar_field(g, 'flatTime', event_name);
-            require_numeric_scalar_field(g, 'fallTime', event_name);
-
-            assert(g.riseTime >= 0 && g.flatTime >= 0 && g.fallTime >= 0, ...
-                '%s riseTime/flatTime/fallTime must be non-negative.', event_name);
-        end
-    end
-
-    % Common optional scalar fields.
-    check_optional_numeric_scalar_field(g, 'delay', event_name, true);
-    check_optional_numeric_scalar_field(g, 'area', event_name, false);
-    check_optional_numeric_scalar_field(g, 'flatArea', event_name, false);
-    check_optional_numeric_scalar_field(g, 'duration', event_name, true);
-end
-
-
-function check_adc_event(adc, event_name)
-% CHECK_ADC_EVENT Validate required fields for a Pulseq ADC event.
-
-    assert(isstruct(adc), ...
-        '%s must be a struct.', event_name);
-
-    require_numeric_scalar_field(adc, 'numSamples', event_name);
-    require_numeric_scalar_field(adc, 'dwell', event_name);
-    require_numeric_scalar_field(adc, 'delay', event_name);
-
-    assert(adc.numSamples == floor(adc.numSamples) && adc.numSamples > 0, ...
-        '%s.numSamples must be a positive integer.', event_name);
-
-    assert(adc.dwell > 0, ...
-        '%s.dwell must be positive.', event_name);
-
-    assert(adc.delay >= 0, ...
-        '%s.delay must be non-negative.', event_name);
-
-    % Dynamic ADC offsets are required by PulSeg SegmentInstance, but in the
-    % normalized BaseBlock they may be zeroed. They should be scalar if present.
-    check_optional_numeric_scalar_field(adc, 'phaseOffset', event_name, false);
-    check_optional_numeric_scalar_field(adc, 'freqOffset', event_name, false);
-end
-
-
 function check_trigger_event(trig, event_name)
 % CHECK_TRIGGER_EVENT Validate optional Pulseq trigger event.
 
@@ -655,16 +448,6 @@ function check_rotation_event(rotation, event_name)
         assert(isnumeric(q) && numel(q) == 4 && all(isfinite(q(:))), ...
             '%s.rotQuaternion must be a finite numeric 4-vector if present.', event_name);
     end
-end
-
-
-function require_numeric_scalar_field(s, fieldname, object_name)
-% REQUIRE_NUMERIC_SCALAR_FIELD Require a finite numeric scalar field.
-
-    require_field(s, fieldname, object_name);
-
-    assert(isnumeric(s.(fieldname)) && isscalar(s.(fieldname)) && isfinite(s.(fieldname)), ...
-        '%s.%s must be a finite numeric scalar.', object_name, fieldname);
 end
 
 
