@@ -151,7 +151,7 @@ while row < pulseg_ir.n_blocks + 1
                     row = row + 1;
                     continue;  % go to next j iteration
                 else
-                    error('(row %d: segment %d, block %d) Non-delay blocks must have the same duration in all segment instances', n, i, j);
+                    error('(row %d: segment %d, block %d) Non-delay blocks must have the same duration in all segment instances', row, i, j);
                 end
             end
         end
