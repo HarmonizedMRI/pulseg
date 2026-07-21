@@ -9,6 +9,8 @@ function pulseg_ir = import(seqarg, varargin)
 %
 % Input options with defaults
 %   verbose               true/FALSE    Print some info to the terminal
+%   soft_delay_input_ms   int           Soft delay 'input' value (ms)
+%
 % Output
 %   pulseg_ir        PulSeq IR struct, see github/HarmonizedMRI/pulseg/docs/spec.md
 
@@ -26,6 +28,7 @@ pulseg_ir.creation_date = char(datetime('today', 'Format', 'yyyy-MM-dd'));
 
 % default inputs and user-specified overrides
 arg.verbose = false;
+arg.soft_delay_input_ms = [];
 arg = vararg_pair(arg, varargin);
 
 %% Get seq object
@@ -49,6 +52,26 @@ blockEvents = reshape(blockEvents, [nEvents, length(seq.blockEvents)]).';
 pulseg_ir.n_blocks = size(blockEvents, 1);
 
 
+%% Check for soft delays
+hasSoftDelay = false;
+
+for row = 1:length(seq.blockEvents)
+    b = seq.getBlock(row);
+
+    if isfield(b,'softDelay') && ~isempty(b.softDelay)
+        hasSoftDelay = true;
+        break;
+    end
+end
+
+if hasSoftDelay
+    assert(~isempty(arg.soft_delay_input_ms), ...
+        ['This Pulseq sequence contains soft delay events. ' ...
+         'Call pulseg.import(..., ''soft_delay_input_ms'', value) ' ...
+         'to specify the soft delay input in milliseconds.']);
+end
+
+
 %% Get TRID labels and corresponding row indices for all segment instances
 n_trid_labels = 0;
 textprogressbar('import(): Reading TRID labels and counting ADC events: ');
@@ -60,6 +83,22 @@ for row = 1:pulseg_ir.n_blocks
     textprogressbar(row/pulseg_ir.n_blocks*100);
 
     b = seq.getBlock(row);
+
+    % Resolve soft delays into fixed delays
+    if ~isempty(arg.soft_delay_input_ms) && ...
+            isfield(b,'softDelay') && ~isempty(b.softDelay)
+
+        dur = arg.soft_delay_input_ms*1e-3 / b.softDelay.factor + ...
+              b.softDelay.offset;
+
+        assert(dur >= 0, ...
+            'Soft delay on block %d evaluates to a negative duration (%g s).', ...
+            row, dur);
+
+        b.softDelay = [];
+        b.delay = mr.makeDelay(dur);
+        b.blockDuration = dur;
+    end
 
     if ~isempty(b.adc)
         pulseg_ir.n_adc = pulseg_ir.n_adc + 1;
